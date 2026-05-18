@@ -39,6 +39,7 @@ object EgyptApi {
         val messages: List<ChatMessage> = emptyList(),
         val users: List<ChatUser> = emptyList(),
         val config: EgyptConfig? = null,
+        val can_moderate: Boolean = false,
     )
 
     @Serializable
@@ -83,11 +84,18 @@ object EgyptApi {
         ),
     )
 
-    suspend fun fetchMessages(viewerUserId: String): Result<ApiResponse> =
-        ioPost(ApiRequest(action = "fetch", user_id = viewerUserId))
+    suspend fun fetchMessages(viewerUserId: String, viewerName: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "fetch", user_id = viewerUserId, name = viewerName))
 
-    suspend fun deleteMessage(userId: String, messageId: String): Result<ApiResponse> =
-        ioPost(ApiRequest(action = "delete_message", user_id = userId, message_id = messageId))
+    suspend fun deleteMessage(userId: String, name: String, messageId: String): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "delete_message",
+                user_id = userId,
+                name = name,
+                message_id = messageId,
+            ),
+        )
 
     suspend fun clearMessages(userId: String, name: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "clear_messages", user_id = userId, name = name))

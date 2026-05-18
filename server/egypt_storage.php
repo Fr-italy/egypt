@@ -1,7 +1,9 @@
 <?php
 /**
- * Storage Egypt: MariaDB se db_config.php esiste, altrimenti JSON.
+ * Storage Egypt — solo MariaDB (richiede db_config.php).
  */
+
+const EGYPT_MODERATOR_NAME = 'frenk';
 
 function egypt_storage_bootstrap(): void
 {
@@ -13,10 +15,14 @@ function egypt_storage_bootstrap(): void
 
     $cfgFile = __DIR__ . '/db_config.php';
     if (!file_exists($cfgFile)) {
+        $GLOBALS['egypt_db_error'] = 'db_config.php mancante sul server';
+
         return;
     }
     $cfg = require $cfgFile;
     if (!is_array($cfg)) {
+        $GLOBALS['egypt_db_error'] = 'db_config.php non valido';
+
         return;
     }
 
@@ -30,8 +36,8 @@ function egypt_storage_bootstrap(): void
         $GLOBALS['egypt_pdo'] = $pdo;
         $GLOBALS['egypt_db_prefix'] = $prefix;
         egypt_db_ensure_tables($pdo, $prefix);
-        egypt_maybe_migrate_json_to_db();
     } catch (Throwable $e) {
+        $GLOBALS['egypt_db_error'] = 'Database: ' . $e->getMessage();
         error_log('Egypt DB: ' . $e->getMessage());
     }
 }
@@ -51,11 +57,32 @@ function egypt_table(string $suffix): string
     return ($GLOBALS['egypt_db_prefix'] ?? 'ram_') . 'egypt_' . $suffix;
 }
 
+function egypt_require_db(): void
+{
+    if (!egypt_using_db()) {
+        $msg = $GLOBALS['egypt_db_error'] ?? 'Database non disponibile';
+        respond(['ok' => false, 'error' => $msg], 503);
+    }
+}
+
+function egypt_is_moderator(string $name): bool
+{
+    return mb_strtolower(trim($name)) === EGYPT_MODERATOR_NAME;
+}
+
+function egypt_require_moderator(string $name): void
+{
+    if (!egypt_is_moderator($name)) {
+        respond(['ok' => false, 'error' => 'Solo Frenk può eseguire questa operazione'], 403);
+    }
+}
+
 function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
 {
     $users = $prefix . 'egypt_users';
     $messages = $prefix . 'egypt_messages';
     $checklist = $prefix . 'egypt_checklist';
+    $config = $prefix . 'egypt_config';
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS {$users} (
         user_id VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -83,73 +110,62 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
         done_by VARCHAR(128) NOT NULL DEFAULT '',
         done_at DATETIME NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$config} (
+        id TINYINT UNSIGNED NOT NULL PRIMARY KEY DEFAULT 1,
+        payload JSON NOT NULL,
+        updated_at DATETIME NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
 
-function egypt_db_migration_flag_path(): string
+function egypt_db_load_config(): ?array
 {
-    global $messagesFile;
-
-    return dirname($messagesFile) . '/.egypt_db_migrated';
-}
-
-function egypt_db_migration_done(): bool
-{
-    return file_exists(egypt_db_migration_flag_path());
-}
-
-function egypt_mark_db_migration_done(): void
-{
-    $flag = egypt_db_migration_flag_path();
-    file_put_contents($flag, gmdate('c'));
-}
-
-/** Importa JSON → DB una sola volta (mai se la tabella messaggi è stata svuotata). */
-function egypt_maybe_migrate_json_to_db(): void
-{
-    if (!egypt_using_db() || egypt_db_migration_done()) {
-        return;
-    }
-
-    global $messagesFile, $usersFile, $checklistStateFile;
-
     $pdo = egypt_pdo();
-    $msgTable = egypt_table('messages');
-    $existing = (int) $pdo->query("SELECT COUNT(*) FROM {$msgTable}")->fetchColumn();
-    if ($existing > 0) {
-        egypt_mark_db_migration_done();
-        write_json_file($messagesFile, []);
+    if (!$pdo) {
+        return null;
+    }
+    $table = egypt_table('config');
+    $stmt = $pdo->query("SELECT payload FROM {$table} WHERE id = 1 LIMIT 1");
+    $row = $stmt->fetch();
+    if (!$row || empty($row['payload'])) {
+        return null;
+    }
+    $data = json_decode($row['payload'], true);
 
+    return is_array($data) ? $data : null;
+}
+
+function egypt_db_save_config(array $cfg): void
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
         return;
     }
-    $jsonMessages = read_json_file($messagesFile, []);
-    if (is_array($jsonMessages)) {
-        foreach ($jsonMessages as $m) {
-            if (!is_array($m) || empty($m['id'])) {
-                continue;
-            }
-            egypt_db_insert_message($m);
-        }
-    }
-    $jsonUsers = read_json_file($usersFile, []);
-    if (is_array($jsonUsers)) {
-        foreach ($jsonUsers as $u) {
-            if (is_array($u) && !empty($u['user_id'])) {
-                egypt_db_touch_user($u['user_id'], $u['name'] ?? '', $u['last_seen'] ?? gmdate('c'));
-            }
-        }
-    }
-    $jsonChecklist = read_json_file($checklistStateFile, []);
-    if (is_array($jsonChecklist)) {
-        foreach ($jsonChecklist as $itemId => $state) {
-            if (!is_array($state)) {
-                continue;
-            }
-            egypt_db_set_checklist($itemId, !empty($state['done']), $state['by'] ?? '', $state['at'] ?? gmdate('c'));
-        }
-    }
+    $table = egypt_table('config');
+    $json = json_encode($cfg, JSON_UNESCAPED_UNICODE);
+    $stmt = $pdo->prepare("INSERT INTO {$table} (id, payload, updated_at) VALUES (1, ?, NOW())
+        ON DUPLICATE KEY UPDATE payload = VALUES(payload), updated_at = NOW()");
+    $stmt->execute([$json]);
+}
 
-    egypt_mark_db_migration_done();
-    write_json_file($messagesFile, []);
+/** Prima installazione: copia config.json nel DB se la riga non esiste. */
+function egypt_db_seed_config_if_empty(array $defaults, ?string $seedJsonPath = null): void
+{
+    if (!egypt_using_db()) {
+        return;
+    }
+    if (egypt_db_load_config() !== null) {
+        return;
+    }
+    $seed = $defaults;
+    if ($seedJsonPath && is_readable($seedJsonPath)) {
+        $raw = file_get_contents($seedJsonPath);
+        $fromFile = json_decode($raw ?: '{}', true);
+        if (is_array($fromFile)) {
+            $seed = array_merge($defaults, $fromFile);
+        }
+    }
+    egypt_db_save_config($seed);
 }
 
 function egypt_db_touch_user(string $userId, string $name, ?string $lastSeen = null): void
@@ -173,6 +189,7 @@ function egypt_db_get_users(): array
     }
     $table = egypt_table('users');
     $rows = $pdo->query("SELECT user_id, name, last_seen FROM {$table} ORDER BY name ASC")->fetchAll();
+
     return array_map(static function ($r) {
         return [
             'user_id' => $r['user_id'],
@@ -222,6 +239,7 @@ function egypt_db_get_messages(string $viewerId): array
         $stmt->execute([$viewerId, $viewerId]);
         $rows = $stmt->fetchAll();
     }
+
     return array_map('egypt_format_message_row', $rows);
 }
 
@@ -238,33 +256,17 @@ function egypt_format_message_row(array $r): array
     ];
 }
 
-function egypt_db_delete_message(string $messageId, string $userId): bool
+function egypt_db_delete_message_by_id(string $messageId): bool
 {
     $pdo = egypt_pdo();
     if (!$pdo) {
         return false;
     }
     $table = egypt_table('messages');
-    $stmt = $pdo->prepare("DELETE FROM {$table} WHERE id = ? AND user_id = ?");
-    $stmt->execute([$messageId, $userId]);
-    return $stmt->rowCount() > 0;
-}
+    $stmt = $pdo->prepare("DELETE FROM {$table} WHERE id = ?");
+    $stmt->execute([$messageId]);
 
-function egypt_db_clear_messages(string $userId): int
-{
-    $pdo = egypt_pdo();
-    if (!$pdo) {
-        return 0;
-    }
-    $table = egypt_table('messages');
-    if ($userId === '') {
-        $count = (int) $pdo->query("SELECT COUNT(*) FROM {$table}")->fetchColumn();
-        $pdo->exec("TRUNCATE TABLE {$table}");
-        return $count;
-    }
-    $stmt = $pdo->prepare("DELETE FROM {$table} WHERE user_id = ? OR to_user_id = ? OR to_user_id = ''");
-    $stmt->execute([$userId, $userId]);
-    return $stmt->rowCount();
+    return $stmt->rowCount() > 0;
 }
 
 function egypt_db_user_exists(string $userId): bool
@@ -276,6 +278,7 @@ function egypt_db_user_exists(string $userId): bool
     $table = egypt_table('users');
     $stmt = $pdo->prepare("SELECT 1 FROM {$table} WHERE user_id = ? LIMIT 1");
     $stmt->execute([$userId]);
+
     return (bool) $stmt->fetchColumn();
 }
 
@@ -289,6 +292,7 @@ function egypt_db_set_checklist(string $itemId, bool $done, string $by, ?string 
     if (!$done) {
         $stmt = $pdo->prepare("DELETE FROM {$table} WHERE item_id = ?");
         $stmt->execute([$itemId]);
+
         return;
     }
     $dt = $at ? date('Y-m-d H:i:s', strtotime($at)) : gmdate('Y-m-d H:i:s');
@@ -313,25 +317,16 @@ function egypt_db_get_checklist_state(): array
             'at' => $r['done_at'] ? gmdate('c', strtotime($r['done_at'])) : '',
         ];
     }
+
     return $state;
 }
 
-// --- Unified API ---
+// --- Unified API (DB only) ---
 
 function egypt_touch_user(string $userId, string $name, ?string $now = null): void
 {
-    global $usersFile;
-    $now = $now ?? gmdate('c');
-    if (egypt_using_db()) {
-        egypt_db_touch_user($userId, $name, $now);
-        return;
-    }
-    $users = read_json_file($usersFile, []);
-    if (!is_array($users)) {
-        $users = [];
-    }
-    $users[$userId] = ['user_id' => $userId, 'name' => $name, 'last_seen' => $now];
-    write_json_file($usersFile, $users);
+    egypt_require_db();
+    egypt_db_touch_user($userId, $name, $now ?? gmdate('c'));
 }
 
 function egypt_dedupe_users_by_name(array $list): array
@@ -360,161 +355,68 @@ function egypt_dedupe_users_by_name(array $list): array
 
 function egypt_clear_all_users(): void
 {
-    global $usersFile;
-    if (egypt_using_db()) {
-        $pdo = egypt_pdo();
-        if ($pdo) {
-            $table = egypt_table('users');
-            $pdo->exec("TRUNCATE TABLE {$table}");
-        }
-    }
-    write_json_file($usersFile, []);
+    egypt_require_db();
+    $pdo = egypt_pdo();
+    $table = egypt_table('users');
+    $pdo->exec("TRUNCATE TABLE {$table}");
 }
 
 function egypt_get_users_list(): array
 {
-    if (egypt_using_db()) {
-        return egypt_dedupe_users_by_name(egypt_db_get_users());
-    }
-    global $usersFile;
-    $users = read_json_file($usersFile, []);
-    if (!is_array($users)) {
-        return [];
-    }
-    $list = array_values($users);
-    usort($list, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
+    egypt_require_db();
 
-    return egypt_dedupe_users_by_name($list);
+    return egypt_dedupe_users_by_name(egypt_db_get_users());
 }
 
 function egypt_user_exists(string $userId): bool
 {
-    if (egypt_using_db()) {
-        return egypt_db_user_exists($userId);
-    }
-    global $usersFile;
-    $users = read_json_file($usersFile, []);
-    return is_array($users) && isset($users[$userId]);
-}
+    egypt_require_db();
 
-function egypt_filter_messages_for_viewer(array $allMessages, string $viewerId): array
-{
-    return array_values(array_filter($allMessages, static function ($m) use ($viewerId) {
-        if (!is_array($m)) {
-            return false;
-        }
-        $to = trim($m['to_user_id'] ?? '');
-        if ($to === '') {
-            return true;
-        }
-        if ($viewerId === '') {
-            return true;
-        }
-        $from = trim($m['user_id'] ?? '');
-        return $from === $viewerId || $to === $viewerId;
-    }));
+    return egypt_db_user_exists($userId);
 }
 
 function egypt_get_messages(string $viewerId): array
 {
-    if (egypt_using_db()) {
-        return egypt_db_get_messages($viewerId);
-    }
-    global $messagesFile;
-    $all = read_json_file($messagesFile, []);
-    if (!is_array($all)) {
-        $all = [];
-    }
-    return egypt_filter_messages_for_viewer($all, $viewerId);
+    egypt_require_db();
+
+    return egypt_db_get_messages($viewerId);
 }
 
 function egypt_add_message(array $message): void
 {
-    global $messagesFile;
-    if (egypt_using_db()) {
-        egypt_db_insert_message($message);
-        return;
-    }
-    $all = read_json_file($messagesFile, []);
-    if (!is_array($all)) {
-        $all = [];
-    }
-    $all[] = $message;
-    if (count($all) > 300) {
-        $all = array_slice($all, -300);
-    }
-    write_json_file($messagesFile, $all);
+    egypt_require_db();
+    egypt_db_insert_message($message);
 }
 
-function egypt_delete_message(string $messageId, string $userId): bool
+function egypt_delete_message(string $messageId, string $requesterName): bool
 {
-    global $messagesFile;
-    if (egypt_using_db()) {
-        return egypt_db_delete_message($messageId, $userId);
-    }
-    $all = read_json_file($messagesFile, []);
-    if (!is_array($all)) {
-        return false;
-    }
-    $found = false;
-    $all = array_values(array_filter($all, static function ($m) use ($messageId, $userId, &$found) {
-        if (!is_array($m) || ($m['id'] ?? '') !== $messageId) {
-            return true;
-        }
-        if (($m['user_id'] ?? '') !== $userId) {
-            return true;
-        }
-        $found = true;
-        return false;
-    }));
-    if ($found) {
-        write_json_file($messagesFile, $all);
-    }
-    return $found;
+    egypt_require_db();
+    egypt_require_moderator($requesterName);
+
+    return egypt_db_delete_message_by_id($messageId);
 }
 
 function egypt_clear_all_messages(): int
 {
-    global $messagesFile;
-    if (egypt_using_db()) {
-        $count = egypt_db_clear_messages('');
-        write_json_file($messagesFile, []);
-        egypt_clear_all_users();
-        return $count;
-    }
-    $all = read_json_file($messagesFile, []);
-    $count = is_array($all) ? count($all) : 0;
-    write_json_file($messagesFile, []);
+    egypt_require_db();
+    $pdo = egypt_pdo();
+    $table = egypt_table('messages');
+    $count = (int) $pdo->query("SELECT COUNT(*) FROM {$table}")->fetchColumn();
+    $pdo->exec("TRUNCATE TABLE {$table}");
     egypt_clear_all_users();
+
     return $count;
 }
 
 function egypt_get_checklist_state(): array
 {
-    if (egypt_using_db()) {
-        return egypt_db_get_checklist_state();
-    }
-    global $checklistStateFile;
-    $state = read_json_file($checklistStateFile, []);
-    return is_array($state) ? $state : [];
+    egypt_require_db();
+
+    return egypt_db_get_checklist_state();
 }
 
 function egypt_set_checklist_item(string $itemId, bool $done, string $name, ?string $now = null): void
 {
-    global $checklistStateFile;
-    $now = $now ?? gmdate('c');
-    if (egypt_using_db()) {
-        egypt_db_set_checklist($itemId, $done, $name, $now);
-        return;
-    }
-    $state = read_json_file($checklistStateFile, []);
-    if (!is_array($state)) {
-        $state = [];
-    }
-    if ($done) {
-        $state[$itemId] = ['done' => true, 'by' => $name, 'at' => $now];
-    } else {
-        unset($state[$itemId]);
-    }
-    write_json_file($checklistStateFile, $state);
+    egypt_require_db();
+    egypt_db_set_checklist($itemId, $done, $name, $now ?? gmdate('c'));
 }

@@ -14,7 +14,9 @@ Assicurati che esista e sia scrivibile. Carica almeno:
 
 - `server/egypt_data/config.json` → `/egypt_data/config.json`
 
-I file `messages.json`, `users.json`, `checklist_state.json` vengono creati automaticamente al primo utilizzo.
+Messaggi, utenti, checklist e configurazione app sono salvati **solo su MariaDB** (tabelle `ram_egypt_*`).  
+`egypt_data/config.json` serve solo come seed iniziale alla prima richiesta, poi tutto è nel DB.  
+Solo l'utente con nome **Frenk** può svuotare la chat o eliminare messaggi.
 
 ## 3. Verifica
 

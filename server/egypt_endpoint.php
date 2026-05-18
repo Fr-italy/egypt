@@ -23,10 +23,7 @@ const EGYPT_DATA_DIR = __DIR__ . '/egypt_data';
 /** Aggiorna il tasso EGP→EUR da internet al massimo ogni N secondi (6 ore). */
 const RATE_REFRESH_INTERVAL_SEC = 21600;
 
-$messagesFile = EGYPT_DATA_DIR . '/messages.json';
-$usersFile = EGYPT_DATA_DIR . '/users.json';
 $configFile = EGYPT_DATA_DIR . '/config.json';
-$checklistStateFile = EGYPT_DATA_DIR . '/checklist_state.json';
 
 // --- Bootstrap file system ---
 
@@ -67,12 +64,6 @@ $defaultConfig = [
 if (!file_exists($configFile)) {
     file_put_contents($configFile, json_encode($defaultConfig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
 }
-foreach ([$messagesFile => [], $usersFile => [], $checklistStateFile => []] as $path => $empty) {
-    if (!file_exists($path)) {
-        file_put_contents($path, json_encode($empty, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
-    }
-}
-
 require_once __DIR__ . '/egypt_storage.php';
 
 // --- Helpers ---
@@ -105,9 +96,20 @@ function respond(array $payload, int $code = 200): void
 
 function load_config(): array
 {
-    global $configFile, $defaultConfig;
-    $cfg = read_json_file($configFile, $defaultConfig);
-    return array_merge($defaultConfig, $cfg);
+    global $defaultConfig, $configFile;
+    egypt_require_db();
+    $cfg = egypt_db_load_config();
+    if ($cfg === null) {
+        egypt_db_seed_config_if_empty($defaultConfig, $configFile);
+        $cfg = egypt_db_load_config();
+    }
+
+    return array_merge($defaultConfig, is_array($cfg) ? $cfg : []);
+}
+
+function save_config(array $cfg): void
+{
+    egypt_db_save_config($cfg);
 }
 
 function http_get_json(string $url, int $timeoutSec = 8): ?array
@@ -183,7 +185,6 @@ function fetch_live_egp_to_eur(): ?array
 /** Aggiorna config.json se scaduto o se $force. Restituisce config aggiornata. */
 function maybe_refresh_exchange_rate(bool $force = false): array
 {
-    global $configFile;
     $cfg = load_config();
     $auto = $cfg['rate_auto_update'] ?? true;
     if (!$auto && !$force) {
@@ -205,7 +206,7 @@ function maybe_refresh_exchange_rate(bool $force = false): array
     $cfg['rate_source'] = $live['source'] . ' (auto)';
     $cfg['rate_updated_at'] = gmdate('Y-m-d');
     $cfg['rate_fetched_at'] = gmdate('c');
-    write_json_file($configFile, $cfg);
+    save_config($cfg);
     return $cfg;
 }
 
@@ -256,6 +257,7 @@ function require_admin(array $body): void
 
 ini_set('memory_limit', '256M');
 egypt_storage_bootstrap();
+egypt_db_seed_config_if_empty($defaultConfig, $configFile);
 
 $now = gmdate('c');
 
@@ -283,10 +285,12 @@ switch ($action) {
 
     case 'fetch':
         $viewerId = trim($body['user_id'] ?? '');
+        $viewerName = trim($body['name'] ?? '');
         respond([
             'ok' => true,
             'messages' => egypt_get_messages($viewerId),
             'users' => egypt_get_users_list(),
+            'can_moderate' => egypt_is_moderator($viewerName),
             'config' => build_config_payload(),
         ]);
 
@@ -350,12 +354,13 @@ switch ($action) {
 
     case 'delete_message':
         $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
         $messageId = trim($body['message_id'] ?? '');
-        if ($userId === '' || $messageId === '') {
-            respond(['ok' => false, 'error' => 'user_id e message_id obbligatori'], 400);
+        if ($userId === '' || $name === '' || $messageId === '') {
+            respond(['ok' => false, 'error' => 'user_id, name e message_id obbligatori'], 400);
         }
-        if (!egypt_delete_message($messageId, $userId)) {
-            respond(['ok' => false, 'error' => 'Messaggio non trovato o non eliminabile'], 404);
+        if (!egypt_delete_message($messageId, $name)) {
+            respond(['ok' => false, 'error' => 'Messaggio non trovato'], 404);
         }
         respond([
             'ok' => true,
@@ -370,6 +375,7 @@ switch ($action) {
         if ($userId === '' || $name === '') {
             respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
         }
+        egypt_require_moderator($name);
         $removed = egypt_clear_all_messages();
         egypt_touch_user($userId, $name, $now);
         respond([
@@ -415,7 +421,7 @@ switch ($action) {
         if (isset($body['announcement'])) {
             $cfg['announcement'] = (string) $body['announcement'];
         }
-        write_json_file($configFile, $cfg);
+        save_config($cfg);
         respond(['ok' => true, 'config' => build_config_payload()]);
 
     case 'update_bounds':
@@ -427,7 +433,7 @@ switch ($action) {
         if (!empty($body['resort_bounds']) && is_array($body['resort_bounds'])) {
             $cfg['resort_bounds'] = array_merge($cfg['resort_bounds'] ?? [], $body['resort_bounds']);
         }
-        write_json_file($configFile, $cfg);
+        save_config($cfg);
         respond(['ok' => true, 'config' => build_config_payload()]);
 
     default:

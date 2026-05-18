@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.frenky.egypt.data.ChatModerator
 import com.frenky.egypt.data.ConfigRepository
 import com.frenky.egypt.data.EgyptApi
 import kotlinx.coroutines.delay
@@ -65,6 +66,7 @@ fun MessagesScreen(
     var status by remember { mutableStateOf<String?>(null) }
     var selectedRecipient by remember { mutableStateOf(MessageRecipient(null, "Tutti")) }
     var showClearDialog by remember { mutableStateOf(false) }
+    val isModerator = remember(userName) { ChatModerator.isModerator(userName) }
     val scope = rememberCoroutineScope()
 
     val recipients = remember(users, userId) {
@@ -93,7 +95,7 @@ fun MessagesScreen(
     fun refresh() {
         scope.launch {
             loading = true
-            EgyptApi.fetchMessages(userId)
+            EgyptApi.fetchMessages(userId, userName)
                 .onSuccess { applyResponse(it) }
                 .onFailure { status = "Connessione: ${it.message}" }
             loading = false
@@ -151,11 +153,13 @@ fun MessagesScreen(
                 Text("Tu: $userName", style = MaterialTheme.typography.bodySmall)
             }
             Row {
-                OutlinedButton(
-                    onClick = { showClearDialog = true },
-                    enabled = !loading && !sending,
-                ) {
-                    Text("Svuota")
+                if (isModerator) {
+                    OutlinedButton(
+                        onClick = { showClearDialog = true },
+                        enabled = !loading && !sending,
+                    ) {
+                        Text("Svuota")
+                    }
                 }
                 IconButton(onClick = { refresh() }, enabled = !loading && !sending) {
                     Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
@@ -259,10 +263,10 @@ fun MessagesScreen(
                 MessageBubble(
                     msg = msg,
                     myUserId = userId,
-                    onDelete = if (msg.user_id == userId && msg.id.isNotBlank()) {
+                    onDelete = if (isModerator && msg.id.isNotBlank()) {
                         {
                             scope.launch {
-                                EgyptApi.deleteMessage(userId, msg.id)
+                                EgyptApi.deleteMessage(userId, userName, msg.id)
                                     .onSuccess { applyResponse(it) }
                                     .onFailure { status = "Errore: ${it.message}" }
                             }
