@@ -77,7 +77,12 @@ fun EgyptAppContent(
                             selected = selected == index,
                             onClick = { selected = index },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
+                            label = {
+                                if (!isModerator) {
+                                    Text(tab.label)
+                                }
+                            },
+                            alwaysShowLabel = !isModerator,
                         )
                     }
                 }

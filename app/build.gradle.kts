@@ -30,8 +30,8 @@ android {
         applicationId = "com.frenky.egypt"
         minSdk = 26
         targetSdk = 35
-        versionCode = 17
-        versionName = "2.0.0"
+        versionCode = 18
+        versionName = "2.0.1"
 
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
