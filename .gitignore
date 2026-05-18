@@ -1,0 +1,17 @@
+*.iml
+.gradle/
+build/
+local.properties
+!local.properties.example
+.idea/
+*.apk
+*.aab
+keystore.properties
+*.jks
+.DS_Store
+captures/
+.kotlin/
+.vscode/
+server/egypt_data/messages.json
+server/egypt_data/users.json
+server/egypt_data/checklist_state.json

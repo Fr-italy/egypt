@@ -1,0 +1,70 @@
+{
+  "egp_to_eur": 0.01625,
+  "rate_source": "manuale",
+  "rate_updated_at": "2026-05-18",
+  "rate_fetched_at": "",
+  "rate_auto_update": true,
+  "announcement": "Benvenuti in Egypt! Biglietti e polizza nella sezione Viaggio → Documenti.",
+  "area_bounds": {
+    "north_lat": 28.0525,
+    "south_lat": 28.0345,
+    "west_lon": 34.4050,
+    "east_lon": 34.4420
+  },
+  "resort_bounds": {
+    "north_lat": 28.0486,
+    "south_lat": 28.0438,
+    "west_lon": 34.4248,
+    "east_lon": 34.4312
+  },
+  "checklist": [
+    {"id": "passport", "text": "Passaporto e documenti"},
+    {"id": "insurance", "text": "Assicurazione viaggio"},
+    {"id": "adapter", "text": "Adattatore prese tipo C/F"},
+    {"id": "sunscreen", "text": "Crema solare"},
+    {"id": "egp_cash", "text": "Contanti EGP / cambio"},
+    {"id": "resort_map", "text": "Scarica mappa offline (già in app)"},
+    {"id": "whatsapp", "text": "Gruppo WhatsApp famiglia"},
+    {"id": "pharmacy", "text": "Farmaco personale + kit base"}
+  ],
+  "phrases_extra": [],
+  "documents": [
+    {
+      "id": "boarding",
+      "title": "Biglietti aerei",
+      "items": [
+        {
+          "id": "boarding_kcf55qh",
+          "title": "Boarding pass — KCF55QH",
+          "url": "https://www.fr-italy.com/egypt_data/documents/boarding/boarding_kcf55qh.pdf"
+        },
+        {
+          "id": "boarding_kcm257j",
+          "title": "Boarding pass — KCM257J",
+          "url": "https://www.fr-italy.com/egypt_data/documents/boarding/boarding_kcm257j.pdf"
+        }
+      ]
+    },
+    {
+      "id": "insurance",
+      "title": "Polizza assicurativa",
+      "items": [
+        {
+          "id": "certificato",
+          "title": "Certificato assicurativo",
+          "url": "https://www.fr-italy.com/egypt_data/documents/insurance/certificato_assicurativo.pdf"
+        },
+        {
+          "id": "set_informativo",
+          "title": "Set informativo",
+          "url": "https://www.fr-italy.com/egypt_data/documents/insurance/set_informativo.pdf"
+        },
+        {
+          "id": "informativa",
+          "title": "Informativa precontrattuale MUP",
+          "url": "https://www.fr-italy.com/egypt_data/documents/insurance/informativa_precontrattuale.pdf"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "sections": [
+    {
+      "id": "boarding",
+      "title": "Biglietti aerei",
+      "items": [
+        {
+          "id": "boarding_kcf55qh",
+          "title": "Boarding pass — KCF55QH",
+          "file": "boarding/boarding_kcf55qh.pdf"
+        },
+        {
+          "id": "boarding_kcm257j",
+          "title": "Boarding pass — KCM257J",
+          "file": "boarding/boarding_kcm257j.pdf"
+        }
+      ]
+    },
+    {
+      "id": "insurance",
+      "title": "Polizza assicurativa",
+      "items": [
+        {
+          "id": "certificato",
+          "title": "Certificato assicurativo",
+          "file": "insurance/certificato_assicurativo.pdf"
+        },
+        {
+          "id": "set_informativo",
+          "title": "Set informativo",
+          "file": "insurance/set_informativo.pdf"
+        },
+        {
+          "id": "informativa",
+          "title": "Informativa precontrattuale MUP",
+          "file": "insurance/informativa_precontrattuale.pdf"
+        }
+      ]
+    }
+  ]
+}

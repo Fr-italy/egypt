@@ -1,0 +1,5 @@
+# Copia come local.properties e inserisci la chiave Google Maps
+# Crea la chiave su: https://console.cloud.google.com/
+# Abilita: Maps SDK for Android
+# Incolla la tua chiave Google Maps (inizia di solito con AIza...)
+MAPS_API_KEY=LA_TUA_CHIAVE_QUI

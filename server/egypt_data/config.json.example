@@ -1,0 +1,9 @@
+{
+  "egp_to_eur": 0.01625,
+  "rate_auto_update": true,
+  "announcement": "",
+  "area_bounds": { "north_lat": 28.0525, "south_lat": 28.0345, "west_lon": 34.405, "east_lon": 34.442 },
+  "resort_bounds": { "north_lat": 28.0486, "south_lat": 28.0438, "west_lon": 34.4248, "east_lon": 34.4312 },
+  "checklist": [],
+  "documents": []
+}

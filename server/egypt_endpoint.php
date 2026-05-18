@@ -1,0 +1,455 @@
+<?php
+/**
+ * Egypt app API — https://www.fr-italy.com/egypt_endpoint.php
+ * Dati in https://www.fr-italy.com/egypt_data/ (cartella scrivibile)
+ */
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST, GET, OPTIONS');
+header('Access-Control-Allow-Headers: Content-Type, X-Egypt-Key');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
+/** Chiave admin: lascia vuota per disabilitare update da app. Imposta la stessa in Android se usi update remoto. */
+const EGYPT_ADMIN_KEY = '';
+
+/** Cartella dati (stesso livello dello script: /egypt_data/) */
+const EGYPT_DATA_DIR = __DIR__ . '/egypt_data';
+
+/** Aggiorna il tasso EGP→EUR da internet al massimo ogni N secondi (6 ore). */
+const RATE_REFRESH_INTERVAL_SEC = 21600;
+
+$messagesFile = EGYPT_DATA_DIR . '/messages.json';
+$usersFile = EGYPT_DATA_DIR . '/users.json';
+$configFile = EGYPT_DATA_DIR . '/config.json';
+$checklistStateFile = EGYPT_DATA_DIR . '/checklist_state.json';
+
+// --- Bootstrap file system ---
+
+if (!is_dir(EGYPT_DATA_DIR)) {
+    mkdir(EGYPT_DATA_DIR, 0755, true);
+}
+
+$defaultConfig = [
+    'egp_to_eur' => 0.01625,
+    'rate_source' => 'manuale',
+    'rate_updated_at' => gmdate('Y-m-d'),
+    'rate_fetched_at' => '',
+    'rate_auto_update' => true,
+    'announcement' => '',
+    'area_bounds' => [
+        'north_lat' => 28.0525,
+        'south_lat' => 28.0345,
+        'west_lon' => 34.4050,
+        'east_lon' => 34.4420,
+    ],
+    'resort_bounds' => [
+        'north_lat' => 28.0486,
+        'south_lat' => 28.0438,
+        'west_lon' => 34.4248,
+        'east_lon' => 34.4312,
+    ],
+    'checklist' => [
+        ['id' => 'passport', 'text' => 'Passaporto e documenti'],
+        ['id' => 'insurance', 'text' => 'Assicurazione viaggio'],
+        ['id' => 'adapter', 'text' => 'Adattatore prese'],
+        ['id' => 'sunscreen', 'text' => 'Crema solare'],
+        ['id' => 'egp_cash', 'text' => 'Cambio EGP'],
+    ],
+    'phrases_extra' => [],
+    'documents' => [],
+];
+
+if (!file_exists($configFile)) {
+    file_put_contents($configFile, json_encode($defaultConfig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+}
+foreach ([$messagesFile => [], $usersFile => [], $checklistStateFile => []] as $path => $empty) {
+    if (!file_exists($path)) {
+        file_put_contents($path, json_encode($empty, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    }
+}
+
+// --- Helpers ---
+
+function read_json_file(string $path, $fallback = [])
+{
+    $raw = @file_get_contents($path);
+    if ($raw === false || $raw === '') {
+        return $fallback;
+    }
+    $data = json_decode($raw, true);
+    return $data ?? $fallback;
+}
+
+function write_json_file(string $path, $data): bool
+{
+    return file_put_contents(
+        $path,
+        json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
+        LOCK_EX
+    ) !== false;
+}
+
+function respond(array $payload, int $code = 200): void
+{
+    http_response_code($code);
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+function load_config(): array
+{
+    global $configFile, $defaultConfig;
+    $cfg = read_json_file($configFile, $defaultConfig);
+    return array_merge($defaultConfig, $cfg);
+}
+
+function http_get_json(string $url, int $timeoutSec = 8): ?array
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_TIMEOUT => $timeoutSec,
+            CURLOPT_HTTPHEADER => ['Accept: application/json', 'User-Agent: EgyptApp/1.0'],
+        ]);
+        $raw = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($raw === false || $code < 200 || $code >= 300) {
+            return null;
+        }
+    } else {
+        $ctx = stream_context_create([
+            'http' => [
+                'timeout' => $timeoutSec,
+                'header' => "Accept: application/json\r\nUser-Agent: EgyptApp/1.0\r\n",
+            ],
+        ]);
+        $raw = @file_get_contents($url, false, $ctx);
+        if ($raw === false) {
+            return null;
+        }
+    }
+    $data = json_decode($raw, true);
+    return is_array($data) ? $data : null;
+}
+
+/** @return array{rate: float, source: string}|null */
+function fetch_live_egp_to_eur(): ?array
+{
+    $providers = [
+        [
+            'source' => 'ExchangeRate-API',
+            'url' => 'https://open.er-api.com/v6/latest/EGP',
+            'parse' => static function (array $d): ?float {
+                if (($d['result'] ?? '') !== 'success') {
+                    return null;
+                }
+                $eur = $d['rates']['EUR'] ?? null;
+                return is_numeric($eur) ? (float) $eur : null;
+            },
+        ],
+        [
+            'source' => 'currency-api (CDN)',
+            'url' => 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/egp.json',
+            'parse' => static function (array $d): ?float {
+                $eur = $d['egp']['eur'] ?? ($d['egp']['EUR'] ?? null);
+                return is_numeric($eur) ? (float) $eur : null;
+            },
+        ],
+    ];
+
+    foreach ($providers as $p) {
+        $data = http_get_json($p['url']);
+        if ($data === null) {
+            continue;
+        }
+        $rate = $p['parse']($data);
+        if ($rate !== null && $rate > 0.001 && $rate < 0.1) {
+            return ['rate' => round($rate, 6), 'source' => $p['source']];
+        }
+    }
+    return null;
+}
+
+/** Aggiorna config.json se scaduto o se $force. Restituisce config aggiornata. */
+function maybe_refresh_exchange_rate(bool $force = false): array
+{
+    global $configFile;
+    $cfg = load_config();
+    $auto = $cfg['rate_auto_update'] ?? true;
+    if (!$auto && !$force) {
+        return $cfg;
+    }
+
+    $lastFetch = strtotime($cfg['rate_fetched_at'] ?? '');
+    $stale = $lastFetch === false || (time() - $lastFetch) >= RATE_REFRESH_INTERVAL_SEC;
+    if (!$force && !$stale) {
+        return $cfg;
+    }
+
+    $live = fetch_live_egp_to_eur();
+    if ($live === null) {
+        return $cfg;
+    }
+
+    $cfg['egp_to_eur'] = $live['rate'];
+    $cfg['rate_source'] = $live['source'] . ' (auto)';
+    $cfg['rate_updated_at'] = gmdate('Y-m-d');
+    $cfg['rate_fetched_at'] = gmdate('c');
+    write_json_file($configFile, $cfg);
+    return $cfg;
+}
+
+function build_config_payload(): array
+{
+    global $checklistStateFile;
+    $cfg = maybe_refresh_exchange_rate(false);
+    $checklistState = read_json_file($checklistStateFile, []);
+    $checklist = [];
+    foreach ($cfg['checklist'] ?? [] as $item) {
+        if (!is_array($item) || empty($item['id'])) {
+            continue;
+        }
+        $id = $item['id'];
+        $state = $checklistState[$id] ?? [];
+        $checklist[] = [
+            'id' => $id,
+            'text' => $item['text'] ?? '',
+            'done' => !empty($state['done']),
+            'done_by' => $state['by'] ?? '',
+            'done_at' => $state['at'] ?? '',
+        ];
+    }
+    return [
+        'egp_to_eur' => (float) ($cfg['egp_to_eur'] ?? 0.01625),
+        'rate_source' => (string) ($cfg['rate_source'] ?? ''),
+        'rate_updated_at' => (string) ($cfg['rate_updated_at'] ?? ''),
+        'announcement' => (string) ($cfg['announcement'] ?? ''),
+        'area_bounds' => $cfg['area_bounds'] ?? [],
+        'resort_bounds' => $cfg['resort_bounds'] ?? [],
+        'checklist' => $checklist,
+        'phrases_extra' => $cfg['phrases_extra'] ?? [],
+        'documents' => $cfg['documents'] ?? [],
+    ];
+}
+
+function require_admin(array $body): void
+{
+    if (EGYPT_ADMIN_KEY === '') {
+        respond(['ok' => false, 'error' => 'Aggiornamento remoto disabilitato sul server'], 403);
+    }
+    $key = $_SERVER['HTTP_X_EGYPT_KEY'] ?? ($body['admin_key'] ?? '');
+    if ($key !== EGYPT_ADMIN_KEY) {
+        respond(['ok' => false, 'error' => 'Chiave admin non valida'], 401);
+    }
+}
+
+function touch_user(string $userId, string $name): void
+{
+    global $usersFile, $now;
+    $users = read_json_file($usersFile, []);
+    if (!is_array($users)) {
+        $users = [];
+    }
+    $users[$userId] = ['user_id' => $userId, 'name' => $name, 'last_seen' => $now];
+    write_json_file($usersFile, $users);
+}
+
+// --- Input ---
+
+$now = gmdate('c');
+
+if ($_SERVER['REQUEST_METHOD'] === 'GET') {
+    respond(['ok' => true, 'config' => build_config_payload()]);
+}
+
+$body = json_decode(file_get_contents('php://input') ?: '{}', true);
+if (!is_array($body)) {
+    respond(['ok' => false, 'error' => 'JSON non valido'], 400);
+}
+
+$action = $body['action'] ?? '';
+
+// --- Actions ---
+
+switch ($action) {
+
+    case 'config':
+        respond(['ok' => true, 'config' => build_config_payload()]);
+
+    case 'refresh_rate':
+        maybe_refresh_exchange_rate(true);
+        respond(['ok' => true, 'config' => build_config_payload()]);
+
+    case 'fetch':
+        $viewerId = trim($body['user_id'] ?? '');
+        $allMessages = read_json_file($messagesFile, []);
+        if (!is_array($allMessages)) {
+            $allMessages = [];
+        }
+        $messages = array_values(array_filter($allMessages, static function ($m) use ($viewerId) {
+            if (!is_array($m)) {
+                return false;
+            }
+            $to = trim($m['to_user_id'] ?? '');
+            if ($to === '') {
+                return true;
+            }
+            if ($viewerId === '') {
+                return true;
+            }
+            $from = trim($m['user_id'] ?? '');
+            return $from === $viewerId || $to === $viewerId;
+        }));
+        $users = read_json_file($usersFile, []);
+        if (!is_array($users)) {
+            $users = [];
+        }
+        $userList = array_values($users);
+        usort($userList, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
+        respond([
+            'ok' => true,
+            'messages' => $messages,
+            'users' => $userList,
+            'config' => build_config_payload(),
+        ]);
+
+    case 'register':
+    case 'heartbeat':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        if ($userId === '' || $name === '') {
+            respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
+        }
+        touch_user($userId, $name);
+        respond([
+            'ok' => true,
+            'users' => array_values(read_json_file($usersFile, [])),
+            'config' => build_config_payload(),
+        ]);
+
+    case 'send':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $message = trim($body['message'] ?? '');
+        $toUserId = trim($body['to_user_id'] ?? '');
+        $toName = trim($body['to_name'] ?? '');
+        if ($userId === '' || $name === '' || $message === '') {
+            respond(['ok' => false, 'error' => 'Campi mancanti'], 400);
+        }
+        if (mb_strlen($message) > 500) {
+            respond(['ok' => false, 'error' => 'Messaggio troppo lungo (max 500)'], 400);
+        }
+        if ($toUserId !== '') {
+            $users = read_json_file($usersFile, []);
+            if (!is_array($users) || !isset($users[$toUserId])) {
+                respond(['ok' => false, 'error' => 'Destinatario non trovato'], 404);
+            }
+            if ($toUserId === $userId) {
+                respond(['ok' => false, 'error' => 'Non puoi scriverti da solo'], 400);
+            }
+            if ($toName === '') {
+                $toName = $users[$toUserId]['name'] ?? '';
+            }
+        }
+        $allMessages = read_json_file($messagesFile, []);
+        if (!is_array($allMessages)) {
+            $allMessages = [];
+        }
+        $allMessages[] = [
+            'id' => bin2hex(random_bytes(8)),
+            'user_id' => $userId,
+            'name' => $name,
+            'to_user_id' => $toUserId,
+            'to_name' => $toName,
+            'message' => $message,
+            'created_at' => $now,
+        ];
+        if (count($allMessages) > 300) {
+            $allMessages = array_slice($allMessages, -300);
+        }
+        write_json_file($messagesFile, $allMessages);
+        touch_user($userId, $name);
+        $visible = array_values(array_filter($allMessages, static function ($m) use ($userId) {
+            $to = trim($m['to_user_id'] ?? '');
+            if ($to === '') {
+                return true;
+            }
+            $from = trim($m['user_id'] ?? '');
+            return $from === $userId || $to === $userId;
+        }));
+        respond([
+            'ok' => true,
+            'messages' => $visible,
+            'config' => build_config_payload(),
+        ]);
+
+    case 'toggle_checklist':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $itemId = trim($body['item_id'] ?? '');
+        if ($userId === '' || $name === '' || $itemId === '') {
+            respond(['ok' => false, 'error' => 'user_id, name e item_id obbligatori'], 400);
+        }
+        $cfg = load_config();
+        $validIds = [];
+        foreach ($cfg['checklist'] ?? [] as $item) {
+            if (is_array($item) && !empty($item['id'])) {
+                $validIds[] = $item['id'];
+            }
+        }
+        if (!in_array($itemId, $validIds, true)) {
+            respond(['ok' => false, 'error' => 'Voce checklist non trovata'], 404);
+        }
+        $done = !empty($body['done']);
+        $state = read_json_file($checklistStateFile, []);
+        if (!is_array($state)) {
+            $state = [];
+        }
+        if ($done) {
+            $state[$itemId] = ['done' => true, 'by' => $name, 'at' => $now];
+        } else {
+            unset($state[$itemId]);
+        }
+        write_json_file($checklistStateFile, $state);
+        touch_user($userId, $name);
+        respond(['ok' => true, 'config' => build_config_payload()]);
+
+    case 'update_rate':
+        require_admin($body);
+        $rate = (float) ($body['egp_to_eur'] ?? 0);
+        if ($rate <= 0 || $rate > 1) {
+            respond(['ok' => false, 'error' => 'egp_to_eur non valido'], 400);
+        }
+        $cfg = load_config();
+        $cfg['egp_to_eur'] = $rate;
+        $cfg['rate_updated_at'] = $body['rate_updated_at'] ?? gmdate('Y-m-d');
+        $cfg['rate_source'] = $body['rate_source'] ?? ($cfg['rate_source'] ?? 'Admin');
+        if (isset($body['announcement'])) {
+            $cfg['announcement'] = (string) $body['announcement'];
+        }
+        write_json_file($configFile, $cfg);
+        respond(['ok' => true, 'config' => build_config_payload()]);
+
+    case 'update_bounds':
+        require_admin($body);
+        $cfg = load_config();
+        if (!empty($body['area_bounds']) && is_array($body['area_bounds'])) {
+            $cfg['area_bounds'] = array_merge($cfg['area_bounds'] ?? [], $body['area_bounds']);
+        }
+        if (!empty($body['resort_bounds']) && is_array($body['resort_bounds'])) {
+            $cfg['resort_bounds'] = array_merge($cfg['resort_bounds'] ?? [], $body['resort_bounds']);
+        }
+        write_json_file($configFile, $cfg);
+        respond(['ok' => true, 'config' => build_config_payload()]);
+
+    default:
+        respond(['ok' => false, 'error' => 'Azione non valida: ' . $action], 400);
+}
