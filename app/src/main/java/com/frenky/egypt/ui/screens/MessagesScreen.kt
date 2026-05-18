@@ -68,11 +68,13 @@ fun MessagesScreen(
     val scope = rememberCoroutineScope()
 
     val recipients = remember(users, userId) {
+        val others = users
+            .filter { it.user_id != userId && it.name.isNotBlank() }
+            .groupBy { it.name.trim().lowercase() }
+            .map { (_, group) -> group.maxByOrNull { it.last_seen }!! }
+            .sortedBy { it.name.lowercase() }
         listOf(MessageRecipient(null, "Tutti")) +
-            users
-                .filter { it.user_id != userId && it.name.isNotBlank() }
-                .sortedBy { it.name.lowercase() }
-                .map { MessageRecipient(it.user_id, it.name) }
+            others.map { MessageRecipient(it.user_id, it.name) }
     }
 
     fun applyResponse(r: EgyptApi.ApiResponse) {
@@ -165,7 +167,12 @@ fun MessagesScreen(
             AlertDialog(
                 onDismissRequest = { showClearDialog = false },
                 title = { Text("Svuotare tutta la chat?") },
-                text = { Text("Elimina tutti i messaggi per tutti. Operazione irreversibile.") },
+                text = {
+                    Text(
+                        "Elimina tutti i messaggi e la lista destinatari. " +
+                            "Chi riapre l'app si registra di nuovo. Irreversibile.",
+                    )
+                },
                 confirmButton = {
                     TextButton(
                         onClick = {

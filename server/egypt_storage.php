@@ -334,10 +334,47 @@ function egypt_touch_user(string $userId, string $name, ?string $now = null): vo
     write_json_file($usersFile, $users);
 }
 
+function egypt_dedupe_users_by_name(array $list): array
+{
+    $byName = [];
+    foreach ($list as $u) {
+        if (!is_array($u)) {
+            continue;
+        }
+        $name = mb_strtolower(trim($u['name'] ?? ''));
+        if ($name === '') {
+            continue;
+        }
+        if (
+            !isset($byName[$name])
+            || strtotime($u['last_seen'] ?? '') > strtotime($byName[$name]['last_seen'] ?? '')
+        ) {
+            $byName[$name] = $u;
+        }
+    }
+    $list = array_values($byName);
+    usort($list, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
+
+    return $list;
+}
+
+function egypt_clear_all_users(): void
+{
+    global $usersFile;
+    if (egypt_using_db()) {
+        $pdo = egypt_pdo();
+        if ($pdo) {
+            $table = egypt_table('users');
+            $pdo->exec("TRUNCATE TABLE {$table}");
+        }
+    }
+    write_json_file($usersFile, []);
+}
+
 function egypt_get_users_list(): array
 {
     if (egypt_using_db()) {
-        return egypt_db_get_users();
+        return egypt_dedupe_users_by_name(egypt_db_get_users());
     }
     global $usersFile;
     $users = read_json_file($usersFile, []);
@@ -346,7 +383,8 @@ function egypt_get_users_list(): array
     }
     $list = array_values($users);
     usort($list, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
-    return $list;
+
+    return egypt_dedupe_users_by_name($list);
 }
 
 function egypt_user_exists(string $userId): bool
@@ -441,11 +479,13 @@ function egypt_clear_all_messages(): int
     if (egypt_using_db()) {
         $count = egypt_db_clear_messages('');
         write_json_file($messagesFile, []);
+        egypt_clear_all_users();
         return $count;
     }
     $all = read_json_file($messagesFile, []);
     $count = is_array($all) ? count($all) : 0;
     write_json_file($messagesFile, []);
+    egypt_clear_all_users();
     return $count;
 }
 
