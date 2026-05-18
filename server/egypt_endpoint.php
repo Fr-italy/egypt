@@ -294,6 +294,30 @@ switch ($action) {
             'config' => build_config_payload(),
         ]);
 
+    case 'update_location':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $lat = isset($body['latitude']) ? (float) $body['latitude'] : null;
+        $lon = isset($body['longitude']) ? (float) $body['longitude'] : null;
+        if ($userId === '' || $name === '' || $lat === null || $lon === null) {
+            respond(['ok' => false, 'error' => 'user_id, name, latitude e longitude obbligatori'], 400);
+        }
+        if ($lat < 22 || $lat > 32 || $lon < 24 || $lon > 37) {
+            respond(['ok' => false, 'error' => 'Coordinate fuori dall\'area vacanza'], 400);
+        }
+        egypt_update_location($userId, $name, $lat, $lon, $now);
+        respond(['ok' => true]);
+
+    case 'get_locations':
+        $name = trim($body['name'] ?? '');
+        if ($name === '') {
+            respond(['ok' => false, 'error' => 'name obbligatorio'], 400);
+        }
+        respond([
+            'ok' => true,
+            'locations' => egypt_get_group_locations($name),
+        ]);
+
     case 'register':
     case 'heartbeat':
         $userId = trim($body['user_id'] ?? '');

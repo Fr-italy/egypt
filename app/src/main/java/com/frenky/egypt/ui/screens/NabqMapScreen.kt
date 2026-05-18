@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.frenky.egypt.data.ChatModerator
+import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.data.EgyptConfig
 import com.frenky.egypt.map.MapsSupport
 
@@ -17,12 +19,22 @@ import com.frenky.egypt.map.MapsSupport
  * Mappa Nabq: Google Maps se disponibile, altrimenti mappa offline (non crasha).
  */
 @Composable
-fun NabqMapScreen(modifier: Modifier = Modifier, config: EgyptConfig) {
+fun NabqMapScreen(
+    modifier: Modifier = Modifier,
+    config: EgyptConfig,
+    userName: String,
+    groupLocations: List<EgyptApi.UserLocation>,
+) {
     val context = LocalContext.current
     val useGoogle = remember(context) { MapsSupport.canUseGoogleMaps(context) }
+    val isModerator = remember(userName) { ChatModerator.isModerator(userName) }
 
     if (useGoogle) {
-        GoogleMapScreen(modifier = modifier)
+        GoogleMapScreen(
+            modifier = modifier,
+            groupLocations = groupLocations,
+            showGroupLegend = isModerator,
+        )
     } else {
         OfflineMapScreen(
             modifier = modifier,
@@ -34,6 +46,8 @@ fun NabqMapScreen(modifier: Modifier = Modifier, config: EgyptConfig) {
             } else {
                 "Satellite offline · Google Play Services non disponibile"
             },
+            groupLocations = groupLocations,
+            showGroupLegend = isModerator,
         )
     }
 }

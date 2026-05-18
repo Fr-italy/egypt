@@ -30,6 +30,8 @@ object EgyptApi {
         val message_id: String? = null,
         val item_id: String? = null,
         val done: Boolean? = null,
+        val latitude: Double? = null,
+        val longitude: Double? = null,
     )
 
     @Serializable
@@ -40,6 +42,16 @@ object EgyptApi {
         val users: List<ChatUser> = emptyList(),
         val config: EgyptConfig? = null,
         val can_moderate: Boolean = false,
+        val locations: List<UserLocation> = emptyList(),
+    )
+
+    @Serializable
+    data class UserLocation(
+        val user_id: String = "",
+        val name: String = "",
+        val latitude: Double = 0.0,
+        val longitude: Double = 0.0,
+        val updated_at: String = "",
     )
 
     @Serializable
@@ -102,6 +114,24 @@ object EgyptApi {
 
     suspend fun heartbeat(userId: String, name: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "heartbeat", user_id = userId, name = name))
+
+    suspend fun updateLocation(
+        userId: String,
+        name: String,
+        latitude: Double,
+        longitude: Double,
+    ): Result<ApiResponse> = ioPost(
+        ApiRequest(
+            action = "update_location",
+            user_id = userId,
+            name = name,
+            latitude = latitude,
+            longitude = longitude,
+        ),
+    )
+
+    suspend fun getGroupLocations(moderatorName: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "get_locations", name = moderatorName))
 
     suspend fun toggleChecklist(
         userId: String,

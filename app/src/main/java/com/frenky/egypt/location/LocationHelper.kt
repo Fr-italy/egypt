@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
@@ -13,6 +14,8 @@ import com.google.android.gms.location.Priority
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 data class GpsPosition(val latitude: Double, val longitude: Double)
 
@@ -24,6 +27,27 @@ class LocationHelper(private val context: Context) {
             PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
                 PackageManager.PERMISSION_GRANTED
+
+    suspend fun getCurrentPosition(): GpsPosition? {
+        if (!hasPermission()) {
+            return null
+        }
+        return suspendCancellableCoroutine { cont ->
+            val request = CurrentLocationRequest.Builder()
+                .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                .setMaxUpdateAgeMillis(120_000L)
+                .build()
+            fused.getCurrentLocation(request, null)
+                .addOnSuccessListener { loc ->
+                    cont.resume(
+                        loc?.let { GpsPosition(it.latitude, it.longitude) },
+                    )
+                }
+                .addOnFailureListener {
+                    cont.resume(null)
+                }
+        }
+    }
 
     fun locationUpdates(): Flow<GpsPosition> = callbackFlow {
         if (!hasPermission()) {

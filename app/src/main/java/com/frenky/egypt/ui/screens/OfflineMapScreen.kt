@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -31,8 +32,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.location.GpsPosition
 import com.frenky.egypt.location.LocationHelper
 import com.frenky.egypt.map.MapBounds
@@ -46,6 +49,8 @@ fun OfflineMapScreen(
     title: String,
     bounds: MapBounds,
     subtitle: String? = null,
+    groupLocations: List<EgyptApi.UserLocation> = emptyList(),
+    showGroupLegend: Boolean = false,
 ) {
     val context = LocalContext.current
     val locationHelper = remember { LocationHelper(context) }
@@ -100,6 +105,18 @@ fun OfflineMapScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (showGroupLegend) {
+            Text(
+                if (groupLocations.isEmpty()) {
+                    "Nessuna posizione del gruppo visibile"
+                } else {
+                    "Gruppo: ${groupLocations.joinToString { it.name }}"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(horizontal = 16.dp),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
         position?.let { gps ->
             Text(
                 "GPS: ${"%.5f".format(gps.latitude)}, ${"%.5f".format(gps.longitude)}" +
@@ -141,13 +158,45 @@ fun OfflineMapScreen(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize().then(transformModifier),
             )
-            if (mapFraction != null && boxSize.width > 0) {
-                val (fx, fy) = mapFraction!!
+            if (boxSize.width > 0) {
                 Canvas(Modifier.fillMaxSize().then(transformModifier)) {
-                    val cx = size.width * fx
-                    val cy = size.height * fy
-                    drawCircle(Color(0xFFE53935), radius = 14f, center = Offset(cx, cy))
-                    drawCircle(Color.White, radius = 14f, center = Offset(cx, cy), style = Stroke(3f))
+                    groupLocations.forEach { person ->
+                        val frac = MapGeoref.latLonToFraction(
+                            person.latitude,
+                            person.longitude,
+                            bounds,
+                        ) ?: return@forEach
+                        val (fx, fy) = frac
+                        val cx = size.width * fx
+                        val cy = size.height * fy
+                        drawCircle(Color(0xFF42A5F5), radius = 12f, center = Offset(cx, cy))
+                        drawCircle(Color.White, radius = 12f, center = Offset(cx, cy), style = Stroke(2f))
+                    }
+                    mapFraction?.let { (fx, fy) ->
+                        val cx = size.width * fx
+                        val cy = size.height * fy
+                        drawCircle(Color(0xFFE53935), radius = 14f, center = Offset(cx, cy))
+                        drawCircle(Color.White, radius = 14f, center = Offset(cx, cy), style = Stroke(3f))
+                    }
+                }
+                groupLocations.forEach { person ->
+                    val frac = MapGeoref.latLonToFraction(
+                        person.latitude,
+                        person.longitude,
+                        bounds,
+                    ) ?: return@forEach
+                    val (fx, fy) = frac
+                    Text(
+                        person.name,
+                        color = Color(0xFF42A5F5),
+                        fontSize = 11.sp,
+                        modifier = Modifier
+                            .then(transformModifier)
+                            .offset(
+                                x = (boxSize.width * fx * scale + offsetX - 8).dp,
+                                y = (boxSize.height * fy * scale + offsetY - 28).dp,
+                            ),
+                    )
                 }
             }
         }

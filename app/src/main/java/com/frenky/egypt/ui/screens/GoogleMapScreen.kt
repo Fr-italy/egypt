@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.location.GpsPosition
 import com.frenky.egypt.location.LocationHelper
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -40,7 +42,11 @@ private fun isInEgypt(lat: Double, lon: Double): Boolean =
 
 /** Solo chiamare se [com.frenky.egypt.map.MapsSupport.canUseGoogleMaps] è true. */
 @Composable
-fun GoogleMapScreen(modifier: Modifier = Modifier) {
+fun GoogleMapScreen(
+    modifier: Modifier = Modifier,
+    groupLocations: List<EgyptApi.UserLocation> = emptyList(),
+    showGroupLegend: Boolean = false,
+) {
     val context = LocalContext.current
     val locationHelper = remember { LocationHelper(context) }
     var gps by remember { mutableStateOf<GpsPosition?>(null) }
@@ -116,16 +122,39 @@ fun GoogleMapScreen(modifier: Modifier = Modifier) {
                     )
                 }
             }
+            groupLocations.forEach { person ->
+                if (isInEgypt(person.latitude, person.longitude)) {
+                    Marker(
+                        state = MarkerState(LatLng(person.latitude, person.longitude)),
+                        title = person.name,
+                        snippet = "Aggiornato: ${person.updated_at}",
+                    )
+                }
+            }
             Marker(state = MarkerState(RESORT_CENTER), title = "Villaggio Pickalbatros")
         }
-        Text(
-            gps?.let { "GPS: ${"%.5f".format(it.latitude)}, ${"%.5f".format(it.longitude)}" }
-                ?: "Fuori Egitto → centrato sul villaggio",
-            modifier = Modifier
+        Column(
+            Modifier
                 .align(Alignment.TopCenter)
                 .padding(12.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        ) {
+            if (showGroupLegend) {
+                Text(
+                    if (groupLocations.isEmpty()) {
+                        "Nessuna posizione del gruppo (GPS spento o app chiusa?)"
+                    } else {
+                        "Gruppo sulla mappa: ${groupLocations.joinToString { it.name }}"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                gps?.let { "GPS: ${"%.5f".format(it.latitude)}, ${"%.5f".format(it.longitude)}" }
+                    ?: "Fuori Egitto → centrato sul villaggio",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
     }
 }

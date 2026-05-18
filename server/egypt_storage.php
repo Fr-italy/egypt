@@ -83,6 +83,7 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
     $messages = $prefix . 'egypt_messages';
     $checklist = $prefix . 'egypt_checklist';
     $config = $prefix . 'egypt_config';
+    $locations = $prefix . 'egypt_locations';
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS {$users} (
         user_id VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -116,6 +117,59 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
         payload JSON NOT NULL,
         updated_at DATETIME NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$locations} (
+        user_id VARCHAR(64) NOT NULL PRIMARY KEY,
+        name VARCHAR(128) NOT NULL,
+        latitude DECIMAL(10, 7) NOT NULL,
+        longitude DECIMAL(10, 7) NOT NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_updated (updated_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+function egypt_db_update_location(string $userId, string $name, float $lat, float $lon, ?string $when = null): void
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
+        return;
+    }
+    if ($lat < -90 || $lat > 90 || $lon < -180 || $lon > 180) {
+        return;
+    }
+    $table = egypt_table('locations');
+    $dt = $when ? date('Y-m-d H:i:s', strtotime($when)) : gmdate('Y-m-d H:i:s');
+    $stmt = $pdo->prepare("INSERT INTO {$table} (user_id, name, latitude, longitude, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE name = VALUES(name), latitude = VALUES(latitude),
+            longitude = VALUES(longitude), updated_at = VALUES(updated_at)");
+    $stmt->execute([$userId, $name, $lat, $lon, $dt]);
+}
+
+/** Posizioni aggiornate nelle ultime $maxAgeSeconds (default 2 ore). */
+function egypt_db_get_locations(int $maxAgeSeconds = 7200): array
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
+        return [];
+    }
+    $table = egypt_table('locations');
+    $stmt = $pdo->prepare("SELECT user_id, name, latitude, longitude, updated_at
+        FROM {$table}
+        WHERE updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? SECOND)
+        ORDER BY name ASC");
+    $stmt->execute([$maxAgeSeconds]);
+    $rows = $stmt->fetchAll();
+
+    return array_map(static function ($r) {
+        return [
+            'user_id' => $r['user_id'],
+            'name' => $r['name'],
+            'latitude' => (float) $r['latitude'],
+            'longitude' => (float) $r['longitude'],
+            'updated_at' => gmdate('c', strtotime($r['updated_at'])),
+        ];
+    }, $rows);
 }
 
 function egypt_db_load_config(): ?array
@@ -419,4 +473,18 @@ function egypt_set_checklist_item(string $itemId, bool $done, string $name, ?str
 {
     egypt_require_db();
     egypt_db_set_checklist($itemId, $done, $name, $now ?? gmdate('c'));
+}
+
+function egypt_update_location(string $userId, string $name, float $lat, float $lon, ?string $now = null): void
+{
+    egypt_require_db();
+    egypt_db_update_location($userId, $name, $lat, $lon, $now);
+}
+
+function egypt_get_group_locations(string $requesterName): array
+{
+    egypt_require_db();
+    egypt_require_moderator($requesterName);
+
+    return egypt_db_get_locations();
 }

@@ -30,6 +30,9 @@ import com.frenky.egypt.ui.screens.MessagesScreen
 import com.frenky.egypt.ui.screens.NabqMapScreen
 import com.frenky.egypt.ui.screens.OfflineMapScreen
 import com.frenky.egypt.ui.components.CopyrightFooter
+import com.frenky.egypt.data.ChatModerator
+import com.frenky.egypt.ui.LocationSync
+import com.frenky.egypt.ui.rememberGroupLocations
 import com.frenky.egypt.ui.screens.PhrasesScreen
 
 private data class Tab(val label: String, val icon: ImageVector)
@@ -42,6 +45,10 @@ fun EgyptAppContent(
     configRepository: ConfigRepository,
 ) {
     ConfigSync(configRepository = configRepository, userId = userId, userName = userName)
+    LocationSync(userId = userId, userName = userName)
+
+    val isModerator = ChatModerator.isModerator(userName)
+    val groupLocations = rememberGroupLocations(userId, userName)
 
     val tabs = listOf(
         Tab("Euro", Icons.Default.AttachMoney),
@@ -74,12 +81,19 @@ fun EgyptAppContent(
         val modifier = Modifier.padding(padding).fillMaxSize()
         when (selected) {
             0 -> ConverterScreen(modifier, config)
-            1 -> NabqMapScreen(modifier = modifier, config = config)
+            1 -> NabqMapScreen(
+                modifier = modifier,
+                config = config,
+                userName = userName,
+                groupLocations = groupLocations,
+            )
             2 -> OfflineMapScreen(
                 modifier = modifier,
                 assetPath = "maps/resort_map.png",
                 title = "Mappa villaggio Pickalbatros",
                 bounds = config.resortMapBounds(),
+                groupLocations = groupLocations,
+                showGroupLegend = isModerator,
             )
             3 -> PhrasesScreen(modifier, config.phrases_extra)
             4 -> TripScreen(modifier, config, userId, userName, configRepository)
