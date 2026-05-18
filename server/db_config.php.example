@@ -1,0 +1,12 @@
+<?php
+/**
+ * Copia come db_config.php (non committare su Git).
+ * Se assente, Egypt usa i file JSON in egypt_data/.
+ */
+return [
+    'host' => 'localhost',
+    'user' => 'webuser',
+    'pass' => 'LA_TUA_PASSWORD',
+    'name' => 'web_www.fr-italy.com',
+    'prefix' => 'ram_',
+];

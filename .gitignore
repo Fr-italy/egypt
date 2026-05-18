@@ -8,6 +8,7 @@ local.properties
 *.aab
 keystore.properties
 *.jks
+server/db_config.php
 .DS_Store
 captures/
 .kotlin/

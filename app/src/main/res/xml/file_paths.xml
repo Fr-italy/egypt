@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="pdf_cache" path="pdfs/" />
-    <external-cache-path name="pdf_external" path="pdfs/" />
+    <external-cache-path name="pdf_external_cache" path="pdfs/" />
+    <external-files-path name="pdf_external_files" path="pdfs/" />
 </paths>

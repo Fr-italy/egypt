@@ -1,5 +1,7 @@
 package com.frenky.egypt.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -18,12 +20,15 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +64,7 @@ fun MessagesScreen(
     var sending by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     var selectedRecipient by remember { mutableStateOf(MessageRecipient(null, "Tutti")) }
+    var showClearDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val recipients = remember(users, userId) {
@@ -142,9 +148,42 @@ fun MessagesScreen(
                 Text("Messaggi", style = MaterialTheme.typography.headlineSmall)
                 Text("Tu: $userName", style = MaterialTheme.typography.bodySmall)
             }
-            IconButton(onClick = { refresh() }, enabled = !loading && !sending) {
-                Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
+            Row {
+                OutlinedButton(
+                    onClick = { showClearDialog = true },
+                    enabled = !loading && !sending,
+                ) {
+                    Text("Svuota")
+                }
+                IconButton(onClick = { refresh() }, enabled = !loading && !sending) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Aggiorna")
+                }
             }
+        }
+
+        if (showClearDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearDialog = false },
+                title = { Text("Svuotare tutta la chat?") },
+                text = { Text("Elimina tutti i messaggi per tutti. Operazione irreversibile.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showClearDialog = false
+                            scope.launch {
+                                sending = true
+                                EgyptApi.clearMessages(userId, userName)
+                                    .onSuccess { applyResponse(it); status = "Chat svuotata" }
+                                    .onFailure { status = "Errore: ${it.message}" }
+                                sending = false
+                            }
+                        },
+                    ) { Text("Elimina tutto") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearDialog = false }) { Text("Annulla") }
+                },
+            )
         }
 
         Text(
@@ -210,7 +249,21 @@ fun MessagesScreen(
                 }
             }
             items(messages.reversed(), key = { it.id.ifEmpty { "${it.created_at}_${it.name}" } }) { msg ->
-                MessageBubble(msg, userId)
+                MessageBubble(
+                    msg = msg,
+                    myUserId = userId,
+                    onDelete = if (msg.user_id == userId && msg.id.isNotBlank()) {
+                        {
+                            scope.launch {
+                                EgyptApi.deleteMessage(userId, msg.id)
+                                    .onSuccess { applyResponse(it) }
+                                    .onFailure { status = "Errore: ${it.message}" }
+                            }
+                        }
+                    } else {
+                        null
+                    },
+                )
             }
         }
 
@@ -239,8 +292,13 @@ fun MessagesScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageBubble(msg: EgyptApi.ChatMessage, myUserId: String) {
+private fun MessageBubble(
+    msg: EgyptApi.ChatMessage,
+    myUserId: String,
+    onDelete: (() -> Unit)?,
+) {
     val isMe = msg.user_id == myUserId
     val isPrivate = !msg.isBroadcast()
     val privateLabel = when {
@@ -253,7 +311,17 @@ private fun MessageBubble(msg: EgyptApi.ChatMessage, myUserId: String) {
     Card(
         Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 4.dp)
+            .then(
+                if (onDelete != null) {
+                    Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = onDelete,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
         colors = CardDefaults.cardColors(
             containerColor = when {
                 isPrivate && isMe -> MaterialTheme.colorScheme.tertiaryContainer
@@ -290,6 +358,13 @@ private fun MessageBubble(msg: EgyptApi.ChatMessage, myUserId: String) {
             }
             Text(msg.message)
             Text(msg.created_at, style = MaterialTheme.typography.labelSmall)
+            if (onDelete != null) {
+                Text(
+                    "Tieni premuto per eliminare",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

@@ -27,6 +27,7 @@ object EgyptApi {
         val message: String? = null,
         val to_user_id: String? = null,
         val to_name: String? = null,
+        val message_id: String? = null,
         val item_id: String? = null,
         val done: Boolean? = null,
     )
@@ -84,6 +85,12 @@ object EgyptApi {
 
     suspend fun fetchMessages(viewerUserId: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "fetch", user_id = viewerUserId))
+
+    suspend fun deleteMessage(userId: String, messageId: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "delete_message", user_id = userId, message_id = messageId))
+
+    suspend fun clearMessages(userId: String, name: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "clear_messages", user_id = userId, name = name))
 
     suspend fun heartbeat(userId: String, name: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "heartbeat", user_id = userId, name = name))

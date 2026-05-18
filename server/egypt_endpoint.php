@@ -73,6 +73,8 @@ foreach ([$messagesFile => [], $usersFile => [], $checklistStateFile => []] as $
     }
 }
 
+require_once __DIR__ . '/egypt_storage.php';
+
 // --- Helpers ---
 
 function read_json_file(string $path, $fallback = [])
@@ -209,9 +211,8 @@ function maybe_refresh_exchange_rate(bool $force = false): array
 
 function build_config_payload(): array
 {
-    global $checklistStateFile;
     $cfg = maybe_refresh_exchange_rate(false);
-    $checklistState = read_json_file($checklistStateFile, []);
+    $checklistState = egypt_get_checklist_state();
     $checklist = [];
     foreach ($cfg['checklist'] ?? [] as $item) {
         if (!is_array($item) || empty($item['id'])) {
@@ -251,18 +252,10 @@ function require_admin(array $body): void
     }
 }
 
-function touch_user(string $userId, string $name): void
-{
-    global $usersFile, $now;
-    $users = read_json_file($usersFile, []);
-    if (!is_array($users)) {
-        $users = [];
-    }
-    $users[$userId] = ['user_id' => $userId, 'name' => $name, 'last_seen' => $now];
-    write_json_file($usersFile, $users);
-}
-
 // --- Input ---
+
+ini_set('memory_limit', '256M');
+egypt_storage_bootstrap();
 
 $now = gmdate('c');
 
@@ -290,34 +283,10 @@ switch ($action) {
 
     case 'fetch':
         $viewerId = trim($body['user_id'] ?? '');
-        $allMessages = read_json_file($messagesFile, []);
-        if (!is_array($allMessages)) {
-            $allMessages = [];
-        }
-        $messages = array_values(array_filter($allMessages, static function ($m) use ($viewerId) {
-            if (!is_array($m)) {
-                return false;
-            }
-            $to = trim($m['to_user_id'] ?? '');
-            if ($to === '') {
-                return true;
-            }
-            if ($viewerId === '') {
-                return true;
-            }
-            $from = trim($m['user_id'] ?? '');
-            return $from === $viewerId || $to === $viewerId;
-        }));
-        $users = read_json_file($usersFile, []);
-        if (!is_array($users)) {
-            $users = [];
-        }
-        $userList = array_values($users);
-        usort($userList, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
         respond([
             'ok' => true,
-            'messages' => $messages,
-            'users' => $userList,
+            'messages' => egypt_get_messages($viewerId),
+            'users' => egypt_get_users_list(),
             'config' => build_config_payload(),
         ]);
 
@@ -328,10 +297,10 @@ switch ($action) {
         if ($userId === '' || $name === '') {
             respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
         }
-        touch_user($userId, $name);
+        egypt_touch_user($userId, $name, $now);
         respond([
             'ok' => true,
-            'users' => array_values(read_json_file($usersFile, [])),
+            'users' => egypt_get_users_list(),
             'config' => build_config_payload(),
         ]);
 
@@ -348,22 +317,22 @@ switch ($action) {
             respond(['ok' => false, 'error' => 'Messaggio troppo lungo (max 500)'], 400);
         }
         if ($toUserId !== '') {
-            $users = read_json_file($usersFile, []);
-            if (!is_array($users) || !isset($users[$toUserId])) {
+            if (!egypt_user_exists($toUserId)) {
                 respond(['ok' => false, 'error' => 'Destinatario non trovato'], 404);
             }
             if ($toUserId === $userId) {
                 respond(['ok' => false, 'error' => 'Non puoi scriverti da solo'], 400);
             }
             if ($toName === '') {
-                $toName = $users[$toUserId]['name'] ?? '';
+                foreach (egypt_get_users_list() as $u) {
+                    if (($u['user_id'] ?? '') === $toUserId) {
+                        $toName = $u['name'] ?? '';
+                        break;
+                    }
+                }
             }
         }
-        $allMessages = read_json_file($messagesFile, []);
-        if (!is_array($allMessages)) {
-            $allMessages = [];
-        }
-        $allMessages[] = [
+        egypt_add_message([
             'id' => bin2hex(random_bytes(8)),
             'user_id' => $userId,
             'name' => $name,
@@ -371,23 +340,43 @@ switch ($action) {
             'to_name' => $toName,
             'message' => $message,
             'created_at' => $now,
-        ];
-        if (count($allMessages) > 300) {
-            $allMessages = array_slice($allMessages, -300);
-        }
-        write_json_file($messagesFile, $allMessages);
-        touch_user($userId, $name);
-        $visible = array_values(array_filter($allMessages, static function ($m) use ($userId) {
-            $to = trim($m['to_user_id'] ?? '');
-            if ($to === '') {
-                return true;
-            }
-            $from = trim($m['user_id'] ?? '');
-            return $from === $userId || $to === $userId;
-        }));
+        ]);
+        egypt_touch_user($userId, $name, $now);
         respond([
             'ok' => true,
-            'messages' => $visible,
+            'messages' => egypt_get_messages($userId),
+            'config' => build_config_payload(),
+        ]);
+
+    case 'delete_message':
+        $userId = trim($body['user_id'] ?? '');
+        $messageId = trim($body['message_id'] ?? '');
+        if ($userId === '' || $messageId === '') {
+            respond(['ok' => false, 'error' => 'user_id e message_id obbligatori'], 400);
+        }
+        if (!egypt_delete_message($messageId, $userId)) {
+            respond(['ok' => false, 'error' => 'Messaggio non trovato o non eliminabile'], 404);
+        }
+        respond([
+            'ok' => true,
+            'messages' => egypt_get_messages($userId),
+            'users' => egypt_get_users_list(),
+            'config' => build_config_payload(),
+        ]);
+
+    case 'clear_messages':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        if ($userId === '' || $name === '') {
+            respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
+        }
+        $removed = egypt_clear_all_messages();
+        egypt_touch_user($userId, $name, $now);
+        respond([
+            'ok' => true,
+            'removed' => $removed,
+            'messages' => [],
+            'users' => egypt_get_users_list(),
             'config' => build_config_payload(),
         ]);
 
@@ -409,17 +398,8 @@ switch ($action) {
             respond(['ok' => false, 'error' => 'Voce checklist non trovata'], 404);
         }
         $done = !empty($body['done']);
-        $state = read_json_file($checklistStateFile, []);
-        if (!is_array($state)) {
-            $state = [];
-        }
-        if ($done) {
-            $state[$itemId] = ['done' => true, 'by' => $name, 'at' => $now];
-        } else {
-            unset($state[$itemId]);
-        }
-        write_json_file($checklistStateFile, $state);
-        touch_user($userId, $name);
+        egypt_set_checklist_item($itemId, $done, $name, $now);
+        egypt_touch_user($userId, $name, $now);
         respond(['ok' => true, 'config' => build_config_payload()]);
 
     case 'update_rate':
