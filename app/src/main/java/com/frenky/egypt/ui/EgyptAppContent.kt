@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,6 +32,8 @@ import com.frenky.egypt.ui.screens.NabqMapScreen
 import com.frenky.egypt.ui.screens.OfflineMapScreen
 import com.frenky.egypt.ui.components.CopyrightFooter
 import com.frenky.egypt.data.ChatModerator
+import com.frenky.egypt.data.PreferencesRepository
+import com.frenky.egypt.ui.screens.CameraMonitorScreen
 import com.frenky.egypt.ui.LocationSync
 import com.frenky.egypt.ui.rememberGroupLocations
 import com.frenky.egypt.ui.screens.PhrasesScreen
@@ -43,21 +46,24 @@ fun EgyptAppContent(
     userId: String,
     config: EgyptConfig,
     configRepository: ConfigRepository,
+    preferences: PreferencesRepository,
 ) {
     ConfigSync(configRepository = configRepository, userId = userId, userName = userName)
     LocationSync(userId = userId, userName = userName)
+    SafetyAutoStart(userId = userId, userName = userName, preferences = preferences)
 
     val isModerator = ChatModerator.isModerator(userName)
     val groupLocations = rememberGroupLocations(userId, userName)
 
-    val tabs = listOf(
-        Tab("Euro", Icons.Default.AttachMoney),
-        Tab("Nabq", Icons.Default.Map),
-        Tab("Villaggio", Icons.Default.Place),
-        Tab("Frasi", Icons.Default.Translate),
-        Tab("Viaggio", Icons.Default.Luggage),
-        Tab("Chat", Icons.Default.Chat),
-    )
+    val tabs = buildList {
+        add(Tab("Euro", Icons.Default.AttachMoney))
+        add(Tab("Nabq", Icons.Default.Map))
+        add(Tab("Villaggio", Icons.Default.Place))
+        add(Tab("Frasi", Icons.Default.Translate))
+        add(Tab("Viaggio", Icons.Default.Luggage))
+        if (isModerator) add(Tab("CAM", Icons.Default.Videocam))
+        add(Tab("Chat", Icons.Default.Chat))
+    }
     var selected by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
@@ -97,7 +103,14 @@ fun EgyptAppContent(
             )
             3 -> PhrasesScreen(modifier, config.phrases_extra)
             4 -> TripScreen(modifier, config, userId, userName, configRepository)
-            5 -> MessagesScreen(modifier, userName, userId, configRepository)
+            5 -> if (isModerator) {
+                CameraMonitorScreen(modifier, userName)
+            } else {
+                MessagesScreen(modifier, userName, userId, configRepository)
+            }
+            6 -> if (isModerator) {
+                MessagesScreen(modifier, userName, userId, configRepository)
+            }
         }
     }
 }

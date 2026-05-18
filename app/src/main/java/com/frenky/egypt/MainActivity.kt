@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
                             userId = userId!!,
                             config = config,
                             configRepository = app.configRepository,
+                            preferences = app.preferences,
                         )
                     }
                 }

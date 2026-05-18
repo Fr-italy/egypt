@@ -53,9 +53,15 @@ $defaultConfig = [
     'checklist' => [
         ['id' => 'passport', 'text' => 'Passaporto e documenti'],
         ['id' => 'insurance', 'text' => 'Assicurazione viaggio'],
-        ['id' => 'adapter', 'text' => 'Adattatore prese'],
+        ['id' => 'adapter', 'text' => 'Adattatore prese tipo C/F'],
         ['id' => 'sunscreen', 'text' => 'Crema solare'],
-        ['id' => 'egp_cash', 'text' => 'Cambio EGP'],
+        ['id' => 'egp_cash', 'text' => 'Contanti EGP / cambio'],
+        ['id' => 'parmigiano', 'text' => 'Parmigiano Reggiano'],
+        ['id' => 'passport_photos', 'text' => 'Due foto tessere'],
+        ['id' => 'usd_tips', 'text' => 'Dollari per le mance'],
+        ['id' => 'resort_map', 'text' => 'Scarica mappa offline (già in app)'],
+        ['id' => 'whatsapp', 'text' => 'Gruppo WhatsApp famiglia'],
+        ['id' => 'pharmacy', 'text' => 'Farmaco personale + kit base'],
     ],
     'phrases_extra' => [],
     'documents' => [],
@@ -94,6 +100,25 @@ function respond(array $payload, int $code = 200): void
     exit;
 }
 
+function merge_checklist_defaults(array $cfg, array $defaults): array
+{
+    $existing = [];
+    foreach ($cfg['checklist'] ?? [] as $item) {
+        if (is_array($item) && !empty($item['id'])) {
+            $existing[$item['id']] = true;
+        }
+    }
+    $merged = is_array($cfg['checklist'] ?? null) ? $cfg['checklist'] : [];
+    foreach ($defaults['checklist'] ?? [] as $item) {
+        if (is_array($item) && !empty($item['id']) && empty($existing[$item['id']])) {
+            $merged[] = $item;
+        }
+    }
+    $cfg['checklist'] = $merged;
+
+    return $cfg;
+}
+
 function load_config(): array
 {
     global $defaultConfig, $configFile;
@@ -104,7 +129,14 @@ function load_config(): array
         $cfg = egypt_db_load_config();
     }
 
-    return array_merge($defaultConfig, is_array($cfg) ? $cfg : []);
+    $cfg = array_merge($defaultConfig, is_array($cfg) ? $cfg : []);
+    $before = json_encode($cfg['checklist'] ?? []);
+    $cfg = merge_checklist_defaults($cfg, $defaultConfig);
+    if (json_encode($cfg['checklist'] ?? []) !== $before) {
+        save_config($cfg);
+    }
+
+    return $cfg;
 }
 
 function save_config(array $cfg): void
@@ -318,6 +350,69 @@ switch ($action) {
             'locations' => egypt_get_group_locations($name),
         ]);
 
+    case 'set_camera_sharing':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $enabled = !empty($body['enabled']);
+        if ($userId === '' || $name === '') {
+            respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
+        }
+        if (egypt_is_moderator($name)) {
+            respond(['ok' => false, 'error' => 'Il moderatore non deve condividere la propria fotocamera'], 400);
+        }
+        egypt_set_camera_sharing($userId, $name, $enabled);
+        respond(['ok' => true, 'enabled' => $enabled]);
+
+    case 'upload_camera_frame':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $imageB64 = $body['image_base64'] ?? '';
+        if ($userId === '' || $name === '' || !is_string($imageB64) || $imageB64 === '') {
+            respond(['ok' => false, 'error' => 'user_id, name e image_base64 obbligatori'], 400);
+        }
+        $bytes = base64_decode($imageB64, true);
+        if ($bytes === false) {
+            respond(['ok' => false, 'error' => 'image_base64 non valido'], 400);
+        }
+        egypt_save_camera_frame($userId, $name, $bytes);
+        respond(['ok' => true]);
+
+    case 'upload_camera_audio':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $audioB64 = $body['audio_base64'] ?? '';
+        if ($userId === '' || $name === '' || !is_string($audioB64) || $audioB64 === '') {
+            respond(['ok' => false, 'error' => 'user_id, name e audio_base64 obbligatori'], 400);
+        }
+        $bytes = base64_decode($audioB64, true);
+        if ($bytes === false) {
+            respond(['ok' => false, 'error' => 'audio_base64 non valido'], 400);
+        }
+        egypt_save_camera_audio($userId, $name, $bytes);
+        respond(['ok' => true]);
+
+    case 'get_camera_feeds':
+        $name = trim($body['name'] ?? '');
+        if ($name === '') {
+            respond(['ok' => false, 'error' => 'name obbligatorio'], 400);
+        }
+        respond([
+            'ok' => true,
+            'camera_feeds' => egypt_get_camera_feeds($name),
+        ]);
+
+    case 'get_camera_image':
+        $name = trim($body['name'] ?? '');
+        $targetId = trim($body['target_user_id'] ?? '');
+        if ($name === '' || $targetId === '') {
+            respond(['ok' => false, 'error' => 'name e target_user_id obbligatori'], 400);
+        }
+        $frame = egypt_get_camera_frame_base64($name, $targetId);
+        if ($frame === null) {
+            respond(['ok' => false, 'error' => 'Nessuna immagine disponibile'], 404);
+        }
+        respond(['ok' => true, 'camera_frame' => $frame]);
+
     case 'register':
     case 'heartbeat':
         $userId = trim($body['user_id'] ?? '');
@@ -326,6 +421,9 @@ switch ($action) {
             respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
         }
         egypt_touch_user($userId, $name, $now);
+        if (!egypt_is_moderator($name)) {
+            egypt_set_camera_sharing($userId, $name, true);
+        }
         respond([
             'ok' => true,
             'users' => egypt_get_users_list(),

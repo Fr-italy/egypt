@@ -23,6 +23,9 @@
     {"id": "adapter", "text": "Adattatore prese tipo C/F"},
     {"id": "sunscreen", "text": "Crema solare"},
     {"id": "egp_cash", "text": "Contanti EGP / cambio"},
+    {"id": "parmigiano", "text": "Parmigiano Reggiano"},
+    {"id": "passport_photos", "text": "Due foto tessere"},
+    {"id": "usd_tips", "text": "Dollari per le mance"},
     {"id": "resort_map", "text": "Scarica mappa offline (già in app)"},
     {"id": "whatsapp", "text": "Gruppo WhatsApp famiglia"},
     {"id": "pharmacy", "text": "Farmaco personale + kit base"}

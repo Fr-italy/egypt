@@ -84,6 +84,7 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
     $checklist = $prefix . 'egypt_checklist';
     $config = $prefix . 'egypt_config';
     $locations = $prefix . 'egypt_locations';
+    $cameraSettings = $prefix . 'egypt_camera_settings';
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS {$users} (
         user_id VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -126,6 +127,174 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
         updated_at DATETIME NOT NULL,
         INDEX idx_updated (updated_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$cameraSettings} (
+        user_id VARCHAR(64) NOT NULL PRIMARY KEY,
+        name VARCHAR(128) NOT NULL,
+        sharing_enabled TINYINT(1) NOT NULL DEFAULT 0,
+        frame_updated_at DATETIME NULL,
+        updated_at DATETIME NOT NULL,
+        INDEX idx_sharing (sharing_enabled)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+}
+
+function egypt_camera_frames_dir(): string
+{
+    $dir = __DIR__ . '/egypt_data/camera_frames';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    return $dir;
+}
+
+function egypt_camera_frame_path(string $userId): string
+{
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '', $userId);
+
+    return egypt_camera_frames_dir() . '/' . $safe . '.jpg';
+}
+
+function egypt_db_set_camera_sharing(string $userId, string $name, bool $enabled): void
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
+        return;
+    }
+    $table = egypt_table('camera_settings');
+    $stmt = $pdo->prepare("INSERT INTO {$table} (user_id, name, sharing_enabled, updated_at)
+        VALUES (?, ?, ?, UTC_TIMESTAMP())
+        ON DUPLICATE KEY UPDATE name = VALUES(name), sharing_enabled = VALUES(sharing_enabled),
+            updated_at = UTC_TIMESTAMP()");
+    $stmt->execute([$userId, $name, $enabled ? 1 : 0]);
+    if (!$enabled) {
+        $path = egypt_camera_frame_path($userId);
+        if (is_file($path)) {
+            unlink($path);
+        }
+        $audio = egypt_camera_audio_path($userId);
+        if (is_file($audio)) {
+            unlink($audio);
+        }
+    }
+}
+
+function egypt_camera_audio_dir(): string
+{
+    $dir = __DIR__ . '/egypt_data/camera_audio';
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    return $dir;
+}
+
+function egypt_camera_audio_path(string $userId): string
+{
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '', $userId);
+
+    return egypt_camera_audio_dir() . '/' . $safe . '.m4a';
+}
+
+function egypt_save_camera_audio(string $userId, string $name, string $audioBytes): void
+{
+    if (!egypt_db_is_camera_sharing($userId)) {
+        respond(['ok' => false, 'error' => 'Condivisione non attiva'], 403);
+    }
+    if (strlen($audioBytes) < 50 || strlen($audioBytes) > 600_000) {
+        respond(['ok' => false, 'error' => 'Audio non valido'], 400);
+    }
+    file_put_contents(egypt_camera_audio_path($userId), $audioBytes, LOCK_EX);
+    $pdo = egypt_pdo();
+    $table = egypt_table('camera_settings');
+    $stmt = $pdo->prepare("UPDATE {$table} SET name = ? WHERE user_id = ?");
+    $stmt->execute([$name, $userId]);
+}
+
+function egypt_db_is_camera_sharing(string $userId): bool
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
+        return false;
+    }
+    $table = egypt_table('camera_settings');
+    $stmt = $pdo->prepare("SELECT sharing_enabled FROM {$table} WHERE user_id = ? LIMIT 1");
+    $stmt->execute([$userId]);
+
+    return (int) $stmt->fetchColumn() === 1;
+}
+
+function egypt_save_camera_frame(string $userId, string $name, string $jpegBytes): void
+{
+    if (!egypt_db_is_camera_sharing($userId)) {
+        respond(['ok' => false, 'error' => 'Condivisione fotocamera non attiva su questo dispositivo'], 403);
+    }
+    if (strlen($jpegBytes) < 100 || strlen($jpegBytes) > 900_000) {
+        respond(['ok' => false, 'error' => 'Immagine non valida'], 400);
+    }
+    $path = egypt_camera_frame_path($userId);
+    file_put_contents($path, $jpegBytes, LOCK_EX);
+
+    $pdo = egypt_pdo();
+    $table = egypt_table('camera_settings');
+    $stmt = $pdo->prepare("UPDATE {$table} SET name = ?, frame_updated_at = UTC_TIMESTAMP() WHERE user_id = ?");
+    $stmt->execute([$name, $userId]);
+}
+
+function egypt_get_camera_feeds(string $requesterName): array
+{
+    egypt_require_moderator($requesterName);
+    $pdo = egypt_pdo();
+    $table = egypt_table('camera_settings');
+    $rows = $pdo->query("SELECT user_id, name, sharing_enabled, frame_updated_at, updated_at
+        FROM {$table} WHERE sharing_enabled = 1 ORDER BY name ASC")->fetchAll();
+    $feeds = [];
+    foreach ($rows as $r) {
+        $path = egypt_camera_frame_path($r['user_id']);
+        $feeds[] = [
+            'user_id' => $r['user_id'],
+            'name' => $r['name'],
+            'sharing_enabled' => true,
+            'has_frame' => is_file($path),
+            'has_audio' => is_file(egypt_camera_audio_path($r['user_id'])),
+            'updated_at' => $r['frame_updated_at']
+                ? gmdate('c', strtotime($r['frame_updated_at']))
+                : '',
+        ];
+    }
+
+    return $feeds;
+}
+
+function egypt_get_camera_frame_base64(string $requesterName, string $targetUserId): ?array
+{
+    egypt_require_moderator($requesterName);
+    if (!egypt_db_is_camera_sharing($targetUserId)) {
+        return null;
+    }
+    $imgPath = egypt_camera_frame_path($targetUserId);
+    $audioPath = egypt_camera_audio_path($targetUserId);
+    if (!is_file($imgPath) && !is_file($audioPath)) {
+        return null;
+    }
+    $pdo = egypt_pdo();
+    $table = egypt_table('camera_settings');
+    $stmt = $pdo->prepare("SELECT name, frame_updated_at FROM {$table} WHERE user_id = ? LIMIT 1");
+    $stmt->execute([$targetUserId]);
+    $row = $stmt->fetch();
+
+    $result = [
+        'user_id' => $targetUserId,
+        'name' => $row['name'] ?? '',
+        'image_base64' => is_file($imgPath) ? base64_encode(file_get_contents($imgPath)) : '',
+        'audio_base64' => is_file($audioPath) ? base64_encode(file_get_contents($audioPath)) : '',
+        'has_audio' => is_file($audioPath),
+        'updated_at' => !empty($row['frame_updated_at'])
+            ? gmdate('c', strtotime($row['frame_updated_at']))
+            : '',
+    ];
+
+    return $result;
 }
 
 function egypt_db_update_location(string $userId, string $name, float $lat, float $lon, ?string $when = null): void
@@ -487,4 +656,10 @@ function egypt_get_group_locations(string $requesterName): array
     egypt_require_moderator($requesterName);
 
     return egypt_db_get_locations();
+}
+
+function egypt_set_camera_sharing(string $userId, string $name, bool $enabled): void
+{
+    egypt_require_db();
+    egypt_db_set_camera_sharing($userId, $name, $enabled);
 }

@@ -32,6 +32,10 @@ object EgyptApi {
         val done: Boolean? = null,
         val latitude: Double? = null,
         val longitude: Double? = null,
+        val enabled: Boolean? = null,
+        val image_base64: String? = null,
+        val audio_base64: String? = null,
+        val target_user_id: String? = null,
     )
 
     @Serializable
@@ -43,6 +47,29 @@ object EgyptApi {
         val config: EgyptConfig? = null,
         val can_moderate: Boolean = false,
         val locations: List<UserLocation> = emptyList(),
+        val camera_feeds: List<CameraFeed> = emptyList(),
+        val camera_frame: CameraFrame? = null,
+        val enabled: Boolean = false,
+    )
+
+    @Serializable
+    data class CameraFeed(
+        val user_id: String = "",
+        val name: String = "",
+        val sharing_enabled: Boolean = false,
+        val has_frame: Boolean = false,
+        val has_audio: Boolean = false,
+        val updated_at: String = "",
+    )
+
+    @Serializable
+    data class CameraFrame(
+        val user_id: String = "",
+        val name: String = "",
+        val image_base64: String = "",
+        val audio_base64: String = "",
+        val has_audio: Boolean = false,
+        val updated_at: String = "",
     )
 
     @Serializable
@@ -132,6 +159,48 @@ object EgyptApi {
 
     suspend fun getGroupLocations(moderatorName: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "get_locations", name = moderatorName))
+
+    suspend fun setCameraSharing(userId: String, name: String, enabled: Boolean): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "set_camera_sharing",
+                user_id = userId,
+                name = name,
+                enabled = enabled,
+            ),
+        )
+
+    suspend fun uploadCameraFrame(userId: String, name: String, imageBase64: String): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "upload_camera_frame",
+                user_id = userId,
+                name = name,
+                image_base64 = imageBase64,
+            ),
+        )
+
+    suspend fun uploadCameraAudio(userId: String, name: String, audioBase64: String): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "upload_camera_audio",
+                user_id = userId,
+                name = name,
+                audio_base64 = audioBase64,
+            ),
+        )
+
+    suspend fun getCameraFeeds(moderatorName: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "get_camera_feeds", name = moderatorName))
+
+    suspend fun getCameraImage(moderatorName: String, targetUserId: String): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "get_camera_image",
+                name = moderatorName,
+                target_user_id = targetUserId,
+            ),
+        )
 
     suspend fun toggleChecklist(
         userId: String,
