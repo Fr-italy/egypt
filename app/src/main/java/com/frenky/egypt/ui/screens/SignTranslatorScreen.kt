@@ -101,8 +101,8 @@ fun SignTranslatorScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         Text(
-            "Inquadra scritte in arabo e tocca Traduci. Serve connessione dati/Wi‑fi " +
-                "per leggere il testo; la traduzione funziona offline dopo il primo download.",
+            "Inquadra scritte in arabo e tocca Traduci. Con rete usa Google Vision; " +
+                "se non è attiva, OCR offline. Traduzione offline dopo il primo download.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),

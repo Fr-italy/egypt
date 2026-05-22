@@ -46,8 +46,8 @@ object CloudVisionOcr {
                 if (!response.isSuccessful) {
                     val msg = parseError(body) ?: "Vision API HTTP ${response.code}"
                     error(
-                        if (response.code == 403 || msg.contains("API key", ignoreCase = true)) {
-                            "Abilita Cloud Vision API nella console Google (stesso progetto della mappa). $msg"
+                        if (response.code == 403 || msg.contains("blocked", ignoreCase = true)) {
+                            "VISION_BLOCKED:$msg"
                         } else {
                             msg
                         },

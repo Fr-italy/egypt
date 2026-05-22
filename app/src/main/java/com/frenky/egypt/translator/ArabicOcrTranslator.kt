@@ -19,7 +19,7 @@ data class SignTranslation(
 )
 
 /** OCR via Google Cloud Vision (rete) + traduzione ML Kit (offline dopo download). */
-class ArabicOcrTranslator(@Suppress("UNUSED_PARAMETER") appContext: Context) {
+class ArabicOcrTranslator(private val appContext: Context) {
     private val arToIt: Translator = Translation.getClient(
         TranslatorOptions.Builder()
             .setSourceLanguage(TranslateLanguage.ARABIC)
@@ -51,7 +51,7 @@ class ArabicOcrTranslator(@Suppress("UNUSED_PARAMETER") appContext: Context) {
             return@withContext Result.failure(IllegalStateException("Modelli traduzione non pronti"))
         }
         runCatching {
-            val raw = CloudVisionOcr.recognizeText(bitmap).getOrThrow().trim()
+            val raw = SignTextRecognizer.recognize(bitmap, appContext).getOrThrow().trim()
             if (raw.isBlank()) {
                 error("Nessun testo rilevato. Avvicinati, luce buona, testo dritto.")
             }
