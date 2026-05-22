@@ -21,6 +21,7 @@ val localProperties = Properties().apply {
     }
 }
 val mapsApiKey: String = localProperties.getProperty("MAPS_API_KEY", "")
+val visionApiKey: String = localProperties.getProperty("VISION_API_KEY", "").ifBlank { mapsApiKey }
 
 android {
     namespace = "com.frenky.egypt"
@@ -30,10 +31,11 @@ android {
         applicationId = "com.frenky.egypt"
         minSdk = 26
         targetSdk = 35
-        versionCode = 33
-        versionName = "2.3.8"
+        versionCode = 34
+        versionName = "2.3.9"
 
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
+        buildConfigField("String", "VISION_API_KEY", "\"$visionApiKey\"")
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 

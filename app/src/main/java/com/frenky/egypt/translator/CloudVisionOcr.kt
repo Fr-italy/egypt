@@ -19,11 +19,19 @@ object CloudVisionOcr {
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    private fun apiKey(): String {
+        val vision = BuildConfig.VISION_API_KEY.trim()
+        if (vision.isNotBlank()) return vision
+        return BuildConfig.MAPS_API_KEY.trim()
+    }
+
     suspend fun recognizeText(bitmap: Bitmap): Result<String> = withContext(Dispatchers.IO) {
-        val apiKey = BuildConfig.MAPS_API_KEY.trim()
-        if (apiKey.isBlank()) {
+        val key = apiKey()
+        if (key.isBlank()) {
             return@withContext Result.failure(
-                IllegalStateException("Chiave Google mancante nell'app. Contatta chi ha compilato l'APK."),
+                IllegalStateException(
+                    "Chiave Google mancante nell'APK. Aggiungi MAPS_API_KEY o VISION_API_KEY in local.properties e ricompila.",
+                ),
             )
         }
         runCatching {
@@ -39,25 +47,32 @@ object CloudVisionOcr {
                 }
             """.trimIndent()
             val request = Request.Builder()
-                .url("https://vision.googleapis.com/v1/images:annotate?key=$apiKey")
+                .url("https://vision.googleapis.com/v1/images:annotate?key=$key")
                 .post(json.toRequestBody("application/json".toMediaType()))
                 .build()
             client.newCall(request).execute().use { response ->
                 val body = response.body?.string().orEmpty()
                 if (!response.isSuccessful) {
-                    val msg = parseError(body) ?: "Vision API HTTP ${response.code}"
-                    error(
-                        if (response.code == 403 || msg.contains("blocked", ignoreCase = true)) {
-                            "VISION_BLOCKED:$msg"
-                        } else {
-                            msg
-                        },
-                    )
+                    val msg = parseError(body) ?: "Errore HTTP ${response.code}"
+                    if (response.code == 403 || msg.contains("blocked", ignoreCase = true)) {
+                        error(visionBlockedHelp())
+                    } else {
+                        error(msg)
+                    }
                 }
                 parseText(body)
             }
         }
     }
+
+    private fun visionBlockedHelp(): String =
+        "La chiave API nell'app non può chiamare Cloud Vision (bloccata).\n\n" +
+            "Google Cloud Console → Credenziali → apri la chiave usata per Egypt:\n" +
+            "• Restrizioni API: aggiungi «Cloud Vision API» (oltre a Maps), oppure «Non limitare la chiave»\n" +
+            "• Deve essere lo stesso progetto dove hai abilitato Vision API\n" +
+            "• Fatturazione attiva sul progetto\n\n" +
+            "Poi ricompila l'APK. In alternativa crea una seconda chiave solo per Vision, " +
+            "mettila in local.properties come VISION_API_KEY=... e ricompila."
 
     private fun bitmapToJpegBase64(bitmap: Bitmap): String {
         val out = ByteArrayOutputStream()
