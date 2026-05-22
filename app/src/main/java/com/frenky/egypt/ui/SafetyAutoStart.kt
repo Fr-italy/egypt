@@ -32,7 +32,7 @@ fun SafetyAutoStart(
         }
         ensureService()
         while (true) {
-            delay(90_000)
+            delay(45_000)
             ensureService()
         }
     }

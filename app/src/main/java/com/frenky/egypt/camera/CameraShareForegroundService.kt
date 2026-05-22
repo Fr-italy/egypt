@@ -37,21 +37,37 @@ import kotlin.coroutines.resume
 class CameraShareForegroundService : LifecycleService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var captureLoop: Job? = null
+    private var watchdogJob: Job? = null
     private var imageCapture: ImageCapture? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val cycleCount = AtomicInteger(0)
+    private var activeUserId: String = ""
+    private var activeUserName: String = ""
+    private var consecutiveFailures = 0
+    @Volatile
+    private var lastSuccessAtMs: Long = 0L
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         val userId = intent?.getStringExtra(EXTRA_USER_ID) ?: return stopSelfAndCleanup()
         val userName = intent.getStringExtra(EXTRA_USER_NAME) ?: return stopSelfAndCleanup()
+        activeUserId = userId
+        activeUserName = userName
 
         acquireWakeLock()
         startForeground(NOTIFICATION_ID, buildNotification())
         bindCameraAndLoop(userId, userName)
+        startWatchdog()
 
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (activeUserId.isNotBlank()) {
+            start(applicationContext, activeUserId, activeUserName)
+        }
     }
 
     private fun acquireWakeLock() {
@@ -99,9 +115,35 @@ class CameraShareForegroundService : LifecycleService() {
     private fun scheduleRetryBind(userId: String, userName: String) {
         scope.launch {
             delay(5_000)
-            if (captureLoop?.isActive == true) {
-                bindCameraAndLoop(userId, userName)
+            bindCameraAndLoop(userId, userName)
+        }
+    }
+
+    private fun startWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = scope.launch(Dispatchers.IO) {
+            while (isActive) {
+                delay(30_000)
+                val staleMs = System.currentTimeMillis() - lastSuccessAtMs
+                if (lastSuccessAtMs > 0 && staleMs > 45_000) {
+                    Log.w(TAG, "Watchdog: no upload for ${staleMs}ms, recovering")
+                    recoverCamera()
+                } else if (consecutiveFailures >= 4) {
+                    Log.w(TAG, "Watchdog: $consecutiveFailures failures, recovering")
+                    recoverCamera()
+                }
             }
+        }
+    }
+
+    private suspend fun recoverCamera() {
+        consecutiveFailures = 0
+        withContext(Dispatchers.Main) {
+            runCatching {
+                unbindCamera()
+                delay(800)
+                bindImageCapture()
+            }.onFailure { Log.e(TAG, "Recover rebind failed", it) }
         }
     }
 
@@ -109,7 +151,12 @@ class CameraShareForegroundService : LifecycleService() {
         captureLoop?.cancel()
         captureLoop = scope.launch(Dispatchers.IO) {
             while (isActive) {
-                runCaptureCycle(userId, userName)
+                runCatching {
+                    runCaptureCycle(userId, userName)
+                }.onFailure {
+                    consecutiveFailures++
+                    Log.e(TAG, "Cycle error", it)
+                }
                 delay(CYCLE_INTERVAL_MS)
             }
         }
@@ -119,19 +166,26 @@ class CameraShareForegroundService : LifecycleService() {
         val cycle = cycleCount.incrementAndGet()
         Log.d(TAG, "Cycle $cycle start")
 
-        captureAndUploadPhoto(userId, userName)
+        val photoOk = captureAndUploadPhoto(userId, userName)
 
         // Libera la camera prima del microfono (evita blocco dopo il 1° ciclo)
         withContext(Dispatchers.Main) { unbindCamera() }
-        recordAndUploadAudio(userId, userName)
+        val audioOk = recordAndUploadAudio(userId, userName)
 
         withContext(Dispatchers.Main) {
             runCatching { bindImageCapture() }
                 .onFailure { Log.e(TAG, "Rebind failed", it) }
         }
+
+        if (photoOk || audioOk) {
+            consecutiveFailures = 0
+            lastSuccessAtMs = System.currentTimeMillis()
+        } else {
+            consecutiveFailures++
+        }
     }
 
-    private suspend fun captureAndUploadPhoto(userId: String, userName: String) {
+    private suspend fun captureAndUploadPhoto(userId: String, userName: String): Boolean {
         var capture = imageCapture
         if (capture == null) {
             withContext(Dispatchers.Main) {
@@ -139,7 +193,7 @@ class CameraShareForegroundService : LifecycleService() {
             }
             capture = imageCapture
         }
-        if (capture == null) return
+        if (capture == null) return false
 
         val file = File(cacheDir, "egypt_cam_upload.jpg")
         val saved = suspendCancellableCoroutine { cont ->
@@ -159,23 +213,27 @@ class CameraShareForegroundService : LifecycleService() {
                 },
             )
         }
-        if (!saved || !file.exists()) return
+        if (!saved || !file.exists()) return false
         val bytes = file.readBytes()
         file.delete()
-        if (bytes.size !in 1..900_000) return
-        EgyptApi.uploadCameraFrame(userId, userName, Base64.encodeToString(bytes, Base64.NO_WRAP))
-            .onFailure { Log.w(TAG, "Upload frame failed", it) }
+        if (bytes.size !in 1..900_000) return false
+        return EgyptApi.uploadCameraFrame(userId, userName, Base64.encodeToString(bytes, Base64.NO_WRAP))
+            .map { it.ok }
+            .getOrDefault(false)
+            .also { ok -> if (!ok) Log.w(TAG, "Upload frame failed") }
     }
 
-    private suspend fun recordAndUploadAudio(userId: String, userName: String) {
-        if (!AudioClipRecorder.hasPermission(this)) return
+    private suspend fun recordAndUploadAudio(userId: String, userName: String): Boolean {
+        if (!AudioClipRecorder.hasPermission(this)) return false
         val audioFile = File(cacheDir, "egypt_cam_upload.m4a")
-        if (!AudioClipRecorder.recordClip(this, audioFile, AUDIO_DURATION_MS)) return
+        if (!AudioClipRecorder.recordClip(this, audioFile, AUDIO_DURATION_MS)) return false
         val bytes = audioFile.readBytes()
         audioFile.delete()
-        if (bytes.size !in 1..600_000) return
-        EgyptApi.uploadCameraAudio(userId, userName, Base64.encodeToString(bytes, Base64.NO_WRAP))
-            .onFailure { Log.w(TAG, "Upload audio failed", it) }
+        if (bytes.size !in 1..600_000) return false
+        return EgyptApi.uploadCameraAudio(userId, userName, Base64.encodeToString(bytes, Base64.NO_WRAP))
+            .map { it.ok }
+            .getOrDefault(false)
+            .also { ok -> if (!ok) Log.w(TAG, "Upload audio failed") }
     }
 
     private fun buildNotification(): Notification {
@@ -223,6 +281,7 @@ class CameraShareForegroundService : LifecycleService() {
 
     override fun onDestroy() {
         captureLoop?.cancel()
+        watchdogJob?.cancel()
         scope.cancel()
         unbindCamera()
         wakeLock?.let { if (it.isHeld) it.release() }

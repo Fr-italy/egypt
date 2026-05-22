@@ -50,8 +50,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.frenky.egypt.camera.FeedFreshness
 import com.frenky.egypt.camera.RemoteAudioPlayer
+import com.frenky.egypt.camera.cameraFeedStatus
 import com.frenky.egypt.data.EgyptApi
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.delay
 
 private enum class CamSection { Live, Gallery, Archive }
@@ -500,8 +503,8 @@ private fun CameraNameList(
     Column(modifier.fillMaxSize().padding(16.dp)) {
         Text("CAM — live", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Tocca un nome: immagine e audio si aggiornano ogni pochi secondi " +
-                "(non è video continuo; serve l'app aperta sul telefono del gruppo).",
+            "Aggiornamento ~8 s. Verde = telefono attivo, arancione/rosso = fermo: " +
+                "riapri Egypt sul telefono del bimbo e disattiva risparmio energetico per l'app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 12.dp),
@@ -521,6 +524,14 @@ private fun CameraNameList(
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(feeds, key = { it.user_id }) { feed ->
+                    val hasSignal = feed.has_frame || feed.has_audio
+                    val statusInfo = cameraFeedStatus(feed.updated_at, hasSignal)
+                    val statusColor = when (statusInfo.freshness) {
+                        FeedFreshness.Live -> Color(0xFF4CAF50)
+                        FeedFreshness.Recent -> MaterialTheme.colorScheme.primary
+                        FeedFreshness.Stale -> MaterialTheme.colorScheme.error
+                        FeedFreshness.Unknown -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -543,20 +554,16 @@ private fun CameraNameList(
                                     fontWeight = FontWeight.Bold,
                                 )
                                 Text(
-                                    when {
-                                        feed.has_frame && feed.has_audio -> "Video + audio live"
-                                        feed.has_frame -> "Video live"
-                                        feed.has_audio -> "Audio live"
-                                        else -> "In attesa segnale…"
-                                    },
+                                    statusInfo.label,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary,
+                                    color = statusColor,
+                                    fontWeight = FontWeight.Medium,
                                 )
                             }
                             Icon(
                                 Icons.Default.Videocam,
                                 contentDescription = "Apri fotocamera",
-                                tint = MaterialTheme.colorScheme.primary,
+                                tint = statusColor,
                                 modifier = Modifier.padding(start = 8.dp),
                             )
                         }
