@@ -39,28 +39,10 @@ fun ConverterScreen(modifier: Modifier = Modifier, config: EgyptConfig) {
         Text("Convertitore EGP → EUR", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Tasso: 1 EGP = $rate EUR" +
-                if (config.rate_updated_at.isNotBlank()) " (${config.rate_updated_at})" else "",
+            "Tasso: 1 EGP = $rate EUR",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (config.rate_source.isNotBlank()) {
-            Text(
-                "Fonte: ${config.rate_source}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (config.announcement.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Text(
-                    config.announcement,
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        }
         Spacer(Modifier.height(20.dp))
         OutlinedTextField(
             value = egpInput,
@@ -87,12 +69,5 @@ fun ConverterScreen(modifier: Modifier = Modifier, config: EgyptConfig) {
                 }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "Tasso aggiornato automaticamente dal web (ogni ~6 ore via server, o dall'app). " +
-                "Funziona offline con l'ultimo valore salvato.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
