@@ -37,7 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -86,7 +86,8 @@ fun SignTranslatorScreen(modifier: Modifier = Modifier) {
     LaunchedEffect(hasPermission, previewView) {
         val pv = previewView ?: return@LaunchedEffect
         if (!hasPermission) return@LaunchedEffect
-        camera.bind(pv)
+        runCatching { camera.bind(pv) }
+            .onFailure { error = "Fotocamera non disponibile: ${it.message}" }
     }
 
     DisposableEffect(Unit) {
@@ -100,8 +101,8 @@ fun SignTranslatorScreen(modifier: Modifier = Modifier) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
         )
         Text(
-            "Inquadra scritte in arabo (negozi, cartelli) e tocca Traduci. " +
-                "Funziona offline dopo il primo download dei modelli.",
+            "Inquadra scritte in arabo e tocca Traduci. Serve connessione dati/Wi‑fi " +
+                "per leggere il testo; la traduzione funziona offline dopo il primo download.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
