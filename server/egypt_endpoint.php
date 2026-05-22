@@ -119,6 +119,55 @@ function merge_checklist_defaults(array $cfg, array $defaults): array
     return $cfg;
 }
 
+function merge_documents_defaults(array $cfg, array $defaults, ?string $seedFile): array
+{
+    $seedDocs = $defaults['documents'] ?? [];
+    if ($seedFile && is_readable($seedFile)) {
+        $fromFile = read_json_file($seedFile, []);
+        if (!empty($fromFile['documents']) && is_array($fromFile['documents'])) {
+            $seedDocs = $fromFile['documents'];
+        }
+    }
+    if (empty($seedDocs)) {
+        return $cfg;
+    }
+
+    $bySection = [];
+    foreach ($cfg['documents'] ?? [] as $section) {
+        if (is_array($section) && !empty($section['id'])) {
+            $bySection[$section['id']] = $section;
+        }
+    }
+
+    foreach ($seedDocs as $seedSection) {
+        if (!is_array($seedSection) || empty($seedSection['id'])) {
+            continue;
+        }
+        $sid = $seedSection['id'];
+        if (!isset($bySection[$sid])) {
+            $bySection[$sid] = $seedSection;
+            continue;
+        }
+        $existingItems = [];
+        foreach ($bySection[$sid]['items'] ?? [] as $item) {
+            if (is_array($item) && !empty($item['id'])) {
+                $existingItems[$item['id']] = true;
+            }
+        }
+        $items = is_array($bySection[$sid]['items'] ?? null) ? $bySection[$sid]['items'] : [];
+        foreach ($seedSection['items'] ?? [] as $seedItem) {
+            if (is_array($seedItem) && !empty($seedItem['id']) && empty($existingItems[$seedItem['id']])) {
+                $items[] = $seedItem;
+            }
+        }
+        $bySection[$sid] = array_merge($bySection[$sid], ['items' => $items]);
+    }
+
+    $cfg['documents'] = array_values($bySection);
+
+    return $cfg;
+}
+
 function load_config(): array
 {
     global $defaultConfig, $configFile;
@@ -130,9 +179,14 @@ function load_config(): array
     }
 
     $cfg = array_merge($defaultConfig, is_array($cfg) ? $cfg : []);
-    $before = json_encode($cfg['checklist'] ?? []);
+    $beforeChecklist = json_encode($cfg['checklist'] ?? []);
     $cfg = merge_checklist_defaults($cfg, $defaultConfig);
-    if (json_encode($cfg['checklist'] ?? []) !== $before) {
+    if (json_encode($cfg['checklist'] ?? []) !== $beforeChecklist) {
+        save_config($cfg);
+    }
+    $beforeDocs = json_encode($cfg['documents'] ?? []);
+    $cfg = merge_documents_defaults($cfg, $defaultConfig, $configFile);
+    if (json_encode($cfg['documents'] ?? []) !== $beforeDocs) {
         save_config($cfg);
     }
 

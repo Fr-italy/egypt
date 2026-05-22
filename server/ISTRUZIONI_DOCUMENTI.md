@@ -12,6 +12,12 @@ egypt_data/
       certificato_assicurativo.pdf
       set_informativo.pdf
       informativa_precontrattuale.pdf
+    transfer/
+      transfer_booking_wa9646.pdf
+      transfer_voucher_wa9646.pdf
+    parking/
+      parkos_ramonda.pdf
+      parkos_ghilardi.pdf
 ```
 
 Aggiorna anche `egypt_data/config.json` (sezione `documents` con gli URL).

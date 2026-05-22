@@ -68,6 +68,38 @@
           "url": "https://www.fr-italy.com/egypt_data/documents/insurance/informativa_precontrattuale.pdf"
         }
       ]
+    },
+    {
+      "id": "transfer",
+      "title": "Transfer",
+      "items": [
+        {
+          "id": "transfer_booking",
+          "title": "Conferma prenotazione transfer — WA9646",
+          "url": "https://www.fr-italy.com/egypt_data/documents/transfer/transfer_booking_wa9646.pdf"
+        },
+        {
+          "id": "transfer_voucher",
+          "title": "Voucher transfer — WA9646",
+          "url": "https://www.fr-italy.com/egypt_data/documents/transfer/transfer_voucher_wa9646.pdf"
+        }
+      ]
+    },
+    {
+      "id": "parking",
+      "title": "Parcheggio",
+      "items": [
+        {
+          "id": "parkos_ramonda",
+          "title": "Parkos — Ramonda",
+          "url": "https://www.fr-italy.com/egypt_data/documents/parking/parkos_ramonda.pdf"
+        },
+        {
+          "id": "parkos_ghilardi",
+          "title": "Parkos — Ghilardi",
+          "url": "https://www.fr-italy.com/egypt_data/documents/parking/parkos_ghilardi.pdf"
+        }
+      ]
     }
   ]
 }
