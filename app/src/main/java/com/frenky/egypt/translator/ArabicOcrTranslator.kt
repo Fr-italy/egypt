@@ -78,7 +78,9 @@ class ArabicOcrTranslator(private val appContext: Context) {
         val tessdataDir = File(base, "tessdata")
         tessdataDir.mkdirs()
         val trained = File(tessdataDir, "ara.traineddata")
-        if (!trained.exists()) {
+        // tess-two 3.x richiede traineddata 3.04 (~6 MB), non tessdata_fast
+        if (!trained.exists() || trained.length() < 5_000_000L) {
+            trained.delete()
             appContext.assets.open("tessdata/ara.traineddata").use { input ->
                 trained.outputStream().use { output -> input.copyTo(output) }
             }
@@ -91,7 +93,11 @@ class ArabicOcrTranslator(private val appContext: Context) {
         val path = tessDataPath ?: error("Tesseract non inizializzato")
         val api = TessBaseAPI()
         return try {
-            check(api.init(path, "ara")) { "Init OCR arabo fallito" }
+            // Arabo senza file .cube: solo motore Tesseract classico (vedi tess-two #239)
+            check(
+                api.init(path, "ara", TessBaseAPI.OEM_TESSERACT_ONLY),
+            ) { "Init OCR arabo fallito. Reinstalla l'app o cancella dati Egypt." }
+            api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
             api.setImage(bitmap)
             api.utF8Text.orEmpty()
         } finally {
