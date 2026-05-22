@@ -2,6 +2,7 @@ package com.frenky.egypt.translator
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.common.model.DownloadConditions
 import com.google.mlkit.nl.translate.TranslateLanguage
@@ -76,27 +77,52 @@ class ArabicOcrTranslator(private val appContext: Context) {
         if (tessReady) return
         val base = File(appContext.filesDir, "tesseract")
         val tessdataDir = File(base, "tessdata")
-        tessdataDir.mkdirs()
-        val trained = File(tessdataDir, "ara.traineddata")
-        // tess-two 3.x richiede traineddata 3.04 (~6 MB), non tessdata_fast
-        if (!trained.exists() || trained.length() < 5_000_000L) {
-            trained.delete()
-            appContext.assets.open("tessdata/ara.traineddata").use { input ->
-                trained.outputStream().use { output -> input.copyTo(output) }
+        val marker = File(tessdataDir, ".bundle_v3")
+        if (!marker.exists()) {
+            tessdataDir.mkdirs()
+            tessdataDir.listFiles()?.forEach { it.delete() }
+            val assets = appContext.assets.list("tessdata") ?: emptyArray()
+            for (name in assets) {
+                copyAsset("tessdata/$name", File(tessdataDir, name))
             }
+            marker.writeText("ok")
+        }
+        val params = File(tessdataDir, "ara.cube.params")
+        val trained = File(tessdataDir, "ara.traineddata")
+        check(params.exists()) {
+            "File ara.cube.params mancante. Reinstalla l'app."
+        }
+        check(trained.exists() && trained.length() > 5_000_000L) {
+            "File lingua araba incompleto. Cancella dati Egypt e riapri Insegne."
+        }
+        val dataPath = base.absolutePath + File.separator
+        val probe = TessBaseAPI()
+        try {
+            check(probe.init(dataPath, "ara", TessBaseAPI.OEM_TESSERACT_ONLY)) {
+                "OCR arabo non avviato. Cancella dati app e riprova."
+            }
+        } finally {
+            probe.end()
         }
         tessDataPath = base.absolutePath
         tessReady = true
+        Log.d(TAG, "Tesseract ready: trained=${trained.length()} params=${params.length()}")
+    }
+
+    private fun copyAsset(assetPath: String, dest: File) {
+        appContext.assets.open(assetPath).use { input ->
+            dest.outputStream().use { output -> input.copyTo(output) }
+        }
     }
 
     private fun recognizeArabic(bitmap: Bitmap): String {
         val path = tessDataPath ?: error("Tesseract non inizializzato")
+        val dataPath = path + File.separator
         val api = TessBaseAPI()
         return try {
-            // Arabo senza file .cube: solo motore Tesseract classico (vedi tess-two #239)
-            check(
-                api.init(path, "ara", TessBaseAPI.OEM_TESSERACT_ONLY),
-            ) { "Init OCR arabo fallito. Reinstalla l'app o cancella dati Egypt." }
+            check(api.init(dataPath, "ara", TessBaseAPI.OEM_TESSERACT_ONLY)) {
+                "OCR arabo non disponibile. Cancella dati Egypt e riapri Insegne."
+            }
             api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
             api.setImage(bitmap)
             api.utF8Text.orEmpty()
@@ -111,6 +137,7 @@ class ArabicOcrTranslator(private val appContext: Context) {
     }
 
     companion object {
+        private const val TAG = "ArabicOcrTranslator"
         private val ARABIC_REGEX = Regex("[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+")
 
         fun extractArabicOrAll(text: String): String {
