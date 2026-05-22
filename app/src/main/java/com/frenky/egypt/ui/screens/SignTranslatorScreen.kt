@@ -45,7 +45,9 @@ import androidx.core.content.ContextCompat
 import com.frenky.egypt.translator.ArabicOcrTranslator
 import com.frenky.egypt.translator.SignCameraController
 import com.frenky.egypt.translator.SignTranslation
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SignTranslatorScreen(modifier: Modifier = Modifier) {
@@ -178,12 +180,23 @@ fun SignTranslatorScreen(modifier: Modifier = Modifier) {
                             scope.launch {
                                 scanning = true
                                 error = null
-                                runCatching {
-                                    val photo = camera.captureBitmap()
-                                    ocr.scanAndTranslate(photo).getOrThrow()
-                                }.onSuccess { result = it }
-                                    .onFailure { e -> error = e.message ?: "Errore traduzione" }
-                                scanning = false
+                                result = null
+                                try {
+                                    val translation = withContext(Dispatchers.IO) {
+                                        var photo: android.graphics.Bitmap? = null
+                                        try {
+                                            photo = camera.captureBitmap()
+                                            ocr.scanAndTranslate(photo).getOrThrow()
+                                        } finally {
+                                            photo?.let { if (!it.isRecycled) it.recycle() }
+                                        }
+                                    }
+                                    result = translation
+                                } catch (e: Exception) {
+                                    error = e.message ?: "Errore traduzione"
+                                } finally {
+                                    scanning = false
+                                }
                             }
                         },
                         enabled = !scanning,

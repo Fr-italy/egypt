@@ -51,7 +51,7 @@ class ArabicOcrTranslator(private val appContext: Context) {
             return@withContext Result.failure(IllegalStateException("Modelli traduzione non pronti"))
         }
         runCatching {
-            val raw = SignTextRecognizer.recognize(bitmap, appContext).getOrThrow().trim()
+            val raw = SignTextRecognizer.recognize(bitmap).getOrThrow().trim()
             if (raw.isBlank()) {
                 error("Nessun testo rilevato. Avvicinati, luce buona, testo dritto.")
             }
@@ -59,9 +59,10 @@ class ArabicOcrTranslator(private val appContext: Context) {
             if (arabic.isBlank()) {
                 error("Testo trovato ma senza arabo. Inquadra scritte in arabo.")
             }
-            val italian = Tasks.await(arToIt.translate(arabic)).trim()
+            val textForTranslate = arabic.take(4_000)
+            val italian = Tasks.await(arToIt.translate(textForTranslate)).trim()
             val english = runCatching {
-                Tasks.await(arToEn.translate(arabic)).trim()
+                Tasks.await(arToEn.translate(textForTranslate)).trim()
             }.getOrDefault("")
             SignTranslation(arabic = arabic, italian = italian, english = english)
         }

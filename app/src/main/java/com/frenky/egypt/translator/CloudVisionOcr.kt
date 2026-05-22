@@ -27,7 +27,8 @@ object CloudVisionOcr {
             )
         }
         runCatching {
-            val jpeg = bitmapToJpegBase64(bitmap)
+            val scaled = BitmapScaler.scaleDown(bitmap)
+            val jpeg = bitmapToJpegBase64(scaled)
             val json = """
                 {
                   "requests": [{
@@ -59,19 +60,8 @@ object CloudVisionOcr {
     }
 
     private fun bitmapToJpegBase64(bitmap: Bitmap): String {
-        var bmp = bitmap
-        val maxSide = 1280
-        if (bmp.width > maxSide || bmp.height > maxSide) {
-            val scale = maxSide.toFloat() / maxOf(bmp.width, bmp.height)
-            bmp = Bitmap.createScaledBitmap(
-                bmp,
-                (bmp.width * scale).toInt(),
-                (bmp.height * scale).toInt(),
-                true,
-            )
-        }
         val out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, 82, out)
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
         return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
     }
 
