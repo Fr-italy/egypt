@@ -30,8 +30,8 @@ android {
         applicationId = "com.frenky.egypt"
         minSdk = 26
         targetSdk = 35
-        versionCode = 24
-        versionName = "2.2.1"
+        versionCode = 26
+        versionName = "2.3.1"
 
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
@@ -87,6 +87,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")
+    implementation("androidx.camera:camera-view:1.4.0")
+    implementation("com.google.mlkit:translate:17.0.3")
+    implementation("com.rmtheis:tess-two:9.1.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.navigation:navigation-compose:2.8.4")
     implementation("androidx.datastore:datastore-preferences:1.1.1")

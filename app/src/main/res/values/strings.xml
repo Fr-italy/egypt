@@ -2,4 +2,8 @@
 <resources>
     <string name="app_name">Egypt</string>
     <string name="copyright_fr_italy">© FR Italy — Franco Ramonda</string>
+    <string name="splash_credit">Questa app è realizzata da\nFranco Ramonda</string>
+    <string name="map_type_normal">Mappa</string>
+    <string name="map_type_satellite">Satellite</string>
+    <string name="map_type_hybrid">Ibrida</string>
 </resources>

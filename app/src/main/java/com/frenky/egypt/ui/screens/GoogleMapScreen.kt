@@ -4,10 +4,14 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,7 +23,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.frenky.egypt.R
 import androidx.core.content.ContextCompat
 import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.location.GpsPosition
@@ -29,6 +35,7 @@ import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapType
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
@@ -52,6 +59,7 @@ fun GoogleMapScreen(
     var gps by remember { mutableStateOf<GpsPosition?>(null) }
     var permissionGranted by remember { mutableStateOf(locationHelper.hasPermission()) }
     var centered by remember { mutableStateOf(false) }
+    var mapType by remember { mutableStateOf(MapType.NORMAL) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -105,7 +113,10 @@ fun GoogleMapScreen(
         GoogleMap(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
-            properties = MapProperties(isMyLocationEnabled = hasFineLocation),
+            properties = MapProperties(
+                mapType = mapType,
+                isMyLocationEnabled = hasFineLocation,
+            ),
             uiSettings = MapUiSettings(
                 zoomControlsEnabled = true,
                 scrollGesturesEnabled = true,
@@ -156,5 +167,44 @@ fun GoogleMapScreen(
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
+        Row(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 12.dp, vertical = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MapTypeChip(
+                label = stringResource(R.string.map_type_normal),
+                selected = mapType == MapType.NORMAL,
+                onClick = { mapType = MapType.NORMAL },
+            )
+            MapTypeChip(
+                label = stringResource(R.string.map_type_satellite),
+                selected = mapType == MapType.SATELLITE,
+                onClick = { mapType = MapType.SATELLITE },
+            )
+            MapTypeChip(
+                label = stringResource(R.string.map_type_hybrid),
+                selected = mapType == MapType.HYBRID,
+                onClick = { mapType = MapType.HYBRID },
+            )
+        }
     }
+}
+
+@Composable
+private fun MapTypeChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+        ),
+    )
 }

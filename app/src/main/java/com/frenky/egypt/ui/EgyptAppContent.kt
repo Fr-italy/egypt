@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Luggage
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
@@ -38,6 +39,7 @@ import com.frenky.egypt.gallery.GallerySync
 import com.frenky.egypt.ui.LocationSync
 import com.frenky.egypt.ui.rememberGroupLocations
 import com.frenky.egypt.ui.screens.PhrasesScreen
+import com.frenky.egypt.ui.screens.SignTranslatorScreen
 
 private data class Tab(val label: String, val icon: ImageVector)
 
@@ -62,6 +64,7 @@ fun EgyptAppContent(
         add(Tab("Nabq", Icons.Default.Map))
         add(Tab("Villaggio", Icons.Default.Place))
         add(Tab("Frasi", Icons.Default.Translate))
+        add(Tab("Insegne", Icons.Default.DocumentScanner))
         add(Tab("Viaggio", Icons.Default.Luggage))
         if (isModerator) add(Tab("CAM", Icons.Default.Videocam))
         add(Tab("Chat", Icons.Default.Chat))
@@ -105,13 +108,14 @@ fun EgyptAppContent(
                 showGroupLegend = isModerator,
             )
             3 -> PhrasesScreen(modifier, config.phrases_extra)
-            4 -> TripScreen(modifier, config, userId, userName, configRepository)
-            5 -> if (isModerator) {
+            4 -> SignTranslatorScreen(modifier)
+            5 -> TripScreen(modifier, config, userId, userName, configRepository)
+            6 -> if (isModerator) {
                 CameraMonitorScreen(modifier, userName)
             } else {
                 MessagesScreen(modifier, userName, userId, configRepository)
             }
-            6 -> if (isModerator) {
+            7 -> if (isModerator) {
                 MessagesScreen(modifier, userName, userId, configRepository)
             }
         }

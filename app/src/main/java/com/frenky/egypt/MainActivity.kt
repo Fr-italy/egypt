@@ -8,6 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.frenky.egypt.ui.SplashScreen
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.frenky.egypt.ui.EgyptAppContent
@@ -30,19 +34,24 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = Color.Black,
                 ) {
-                    if (userName.isNullOrBlank() || userId.isNullOrBlank()) {
-                        OnboardingScreen(
-                            preferences = app.preferences,
-                            configRepository = app.configRepository,
-                        )
-                    } else {
-                        EgyptAppContent(
-                            userName = userName!!,
-                            userId = userId!!,
-                            config = config,
-                            configRepository = app.configRepository,
-                            preferences = app.preferences,
-                        )
+                    var showSplash by remember { mutableStateOf(true) }
+                    when {
+                        showSplash -> SplashScreen(onFinished = { showSplash = false })
+                        userName.isNullOrBlank() || userId.isNullOrBlank() -> {
+                            OnboardingScreen(
+                                preferences = app.preferences,
+                                configRepository = app.configRepository,
+                            )
+                        }
+                        else -> {
+                            EgyptAppContent(
+                                userName = userName!!,
+                                userId = userId!!,
+                                config = config,
+                                configRepository = app.configRepository,
+                                preferences = app.preferences,
+                            )
+                        }
                     }
                 }
             }
