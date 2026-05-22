@@ -68,7 +68,7 @@ $defaultConfig = [
 ];
 
 if (!file_exists($configFile)) {
-    file_put_contents($configFile, json_encode($defaultConfig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    write_json_file($configFile, $defaultConfig);
 }
 require_once __DIR__ . '/egypt_storage.php';
 
@@ -86,7 +86,15 @@ function read_json_file(string $path, $fallback = [])
 
 function write_json_file(string $path, $data): bool
 {
-    return file_put_contents(
+    $dir = dirname($path);
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    if (!is_writable($dir)) {
+        return false;
+    }
+
+    return @file_put_contents(
         $path,
         json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT),
         LOCK_EX
@@ -466,6 +474,79 @@ switch ($action) {
             respond(['ok' => false, 'error' => 'Nessuna immagine disponibile'], 404);
         }
         respond(['ok' => true, 'camera_frame' => $frame]);
+
+    case 'get_camera_history':
+        $name = trim($body['name'] ?? '');
+        $targetId = trim($body['target_user_id'] ?? '');
+        if ($name === '' || $targetId === '') {
+            respond(['ok' => false, 'error' => 'name e target_user_id obbligatori'], 400);
+        }
+        respond([
+            'ok' => true,
+            'camera_history' => egypt_get_camera_history($name, $targetId),
+        ]);
+
+    case 'get_camera_history_item':
+        $name = trim($body['name'] ?? '');
+        $targetId = trim($body['target_user_id'] ?? '');
+        $fileId = trim($body['file_id'] ?? '');
+        if ($name === '' || $targetId === '' || $fileId === '') {
+            respond(['ok' => false, 'error' => 'name, target_user_id e file_id obbligatori'], 400);
+        }
+        $item = egypt_get_camera_history_file_base64($name, $targetId, $fileId);
+        if ($item === null) {
+            respond(['ok' => false, 'error' => 'File non trovato'], 404);
+        }
+        respond(['ok' => true, 'camera_history_item' => $item]);
+
+    case 'upload_gallery_photo':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        $photoId = trim($body['photo_id'] ?? '');
+        $imageB64 = $body['image_base64'] ?? '';
+        if ($userId === '' || $name === '' || $photoId === '' || !is_string($imageB64) || $imageB64 === '') {
+            respond(['ok' => false, 'error' => 'user_id, name, photo_id e image_base64 obbligatori'], 400);
+        }
+        $bytes = base64_decode($imageB64, true);
+        if ($bytes === false) {
+            respond(['ok' => false, 'error' => 'image_base64 non valido'], 400);
+        }
+        egypt_save_gallery_photo($userId, $name, $photoId, $bytes);
+        respond(['ok' => true]);
+
+    case 'get_gallery_users':
+        $name = trim($body['name'] ?? '');
+        if ($name === '') {
+            respond(['ok' => false, 'error' => 'name obbligatorio'], 400);
+        }
+        respond([
+            'ok' => true,
+            'gallery_users' => egypt_get_gallery_users($name),
+        ]);
+
+    case 'get_gallery_items':
+        $name = trim($body['name'] ?? '');
+        $targetId = trim($body['target_user_id'] ?? '');
+        if ($name === '' || $targetId === '') {
+            respond(['ok' => false, 'error' => 'name e target_user_id obbligatori'], 400);
+        }
+        respond([
+            'ok' => true,
+            'gallery_items' => egypt_get_gallery_items($name, $targetId),
+        ]);
+
+    case 'get_gallery_image':
+        $name = trim($body['name'] ?? '');
+        $targetId = trim($body['target_user_id'] ?? '');
+        $photoId = trim($body['photo_id'] ?? '');
+        if ($name === '' || $targetId === '' || $photoId === '') {
+            respond(['ok' => false, 'error' => 'name, target_user_id e photo_id obbligatori'], 400);
+        }
+        $img = egypt_get_gallery_image_base64($name, $targetId, $photoId);
+        if ($img === null) {
+            respond(['ok' => false, 'error' => 'Foto non trovata'], 404);
+        }
+        respond(['ok' => true, 'gallery_image' => $img]);
 
     case 'register':
     case 'heartbeat':

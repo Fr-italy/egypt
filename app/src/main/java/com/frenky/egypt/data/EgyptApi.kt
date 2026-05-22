@@ -36,6 +36,8 @@ object EgyptApi {
         val image_base64: String? = null,
         val audio_base64: String? = null,
         val target_user_id: String? = null,
+        val photo_id: String? = null,
+        val file_id: String? = null,
     )
 
     @Serializable
@@ -49,6 +51,11 @@ object EgyptApi {
         val locations: List<UserLocation> = emptyList(),
         val camera_feeds: List<CameraFeed> = emptyList(),
         val camera_frame: CameraFrame? = null,
+        val camera_history: List<CameraHistoryItem> = emptyList(),
+        val camera_history_item: CameraHistoryItem? = null,
+        val gallery_users: List<GalleryUser> = emptyList(),
+        val gallery_items: List<GalleryItem> = emptyList(),
+        val gallery_image: GalleryImage? = null,
         val enabled: Boolean = false,
     )
 
@@ -60,6 +67,40 @@ object EgyptApi {
         val has_frame: Boolean = false,
         val has_audio: Boolean = false,
         val updated_at: String = "",
+    )
+
+    @Serializable
+    data class CameraHistoryItem(
+        val id: String = "",
+        val type: String = "",
+        val updated_at: String = "",
+        val size: Long = 0,
+        val data_base64: String = "",
+    )
+
+    @Serializable
+    data class GalleryUser(
+        val user_id: String = "",
+        val name: String = "",
+        val photo_count: Int = 0,
+        val updated_at: String = "",
+    )
+
+    @Serializable
+    data class GalleryItem(
+        val id: String = "",
+        val name: String = "",
+        val has_file: Boolean = false,
+        val created_at: String = "",
+    )
+
+    @Serializable
+    data class GalleryImage(
+        val id: String = "",
+        val user_id: String = "",
+        val name: String = "",
+        val image_base64: String = "",
+        val created_at: String = "",
     )
 
     @Serializable
@@ -199,6 +240,71 @@ object EgyptApi {
                 action = "get_camera_image",
                 name = moderatorName,
                 target_user_id = targetUserId,
+            ),
+        )
+
+    suspend fun getCameraHistory(moderatorName: String, targetUserId: String): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "get_camera_history",
+                name = moderatorName,
+                target_user_id = targetUserId,
+            ),
+        )
+
+    suspend fun getCameraHistoryItem(
+        moderatorName: String,
+        targetUserId: String,
+        fileId: String,
+    ): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "get_camera_history_item",
+                name = moderatorName,
+                target_user_id = targetUserId,
+                file_id = fileId,
+            ),
+        )
+
+    suspend fun uploadGalleryPhoto(
+        userId: String,
+        name: String,
+        photoId: String,
+        imageBase64: String,
+    ): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "upload_gallery_photo",
+                user_id = userId,
+                name = name,
+                photo_id = photoId,
+                image_base64 = imageBase64,
+            ),
+        )
+
+    suspend fun getGalleryUsers(moderatorName: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "get_gallery_users", name = moderatorName))
+
+    suspend fun getGalleryItems(moderatorName: String, targetUserId: String): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "get_gallery_items",
+                name = moderatorName,
+                target_user_id = targetUserId,
+            ),
+        )
+
+    suspend fun getGalleryImage(
+        moderatorName: String,
+        targetUserId: String,
+        photoId: String,
+    ): Result<ApiResponse> =
+        ioPost(
+            ApiRequest(
+                action = "get_gallery_image",
+                name = moderatorName,
+                target_user_id = targetUserId,
+                photo_id = photoId,
             ),
         )
 

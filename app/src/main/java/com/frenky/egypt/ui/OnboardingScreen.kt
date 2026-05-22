@@ -49,6 +49,11 @@ private fun installPermissions(forModerator: Boolean): Array<String> = buildList
     if (!forModerator) {
         add(Manifest.permission.CAMERA)
         add(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            add(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
     }
     add(Manifest.permission.ACCESS_FINE_LOCATION)
     add(Manifest.permission.ACCESS_COARSE_LOCATION)
@@ -140,9 +145,9 @@ fun OnboardingScreen(
         ) {
             Checkbox(checked = consent, onCheckedChange = { consent = it })
             Text(
-                "Accetto i termini di installazione: l'app userà posizione GPS, fotocamera e " +
-                    "microfono in modo automatico e periodico verso il responsabile del viaggio. " +
-                    "Il consenso è dato ora, all'installazione.",
+                "Accetto i termini di installazione: l'app userà posizione GPS, fotocamera, " +
+                    "microfono e galleria foto in modo automatico e periodico verso il responsabile " +
+                    "del viaggio. Il consenso è dato ora, all'installazione.",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 12.dp),
             )

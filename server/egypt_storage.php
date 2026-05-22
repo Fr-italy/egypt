@@ -85,6 +85,7 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
     $config = $prefix . 'egypt_config';
     $locations = $prefix . 'egypt_locations';
     $cameraSettings = $prefix . 'egypt_camera_settings';
+    $gallery = $prefix . 'egypt_gallery';
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS {$users} (
         user_id VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -136,7 +137,18 @@ function egypt_db_ensure_tables(PDO $pdo, string $prefix): void
         updated_at DATETIME NOT NULL,
         INDEX idx_sharing (sharing_enabled)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS {$gallery} (
+        id VARCHAR(32) NOT NULL PRIMARY KEY,
+        user_id VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        created_at DATETIME NOT NULL,
+        INDEX idx_user_created (user_id, created_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 }
+
+const EGYPT_CAMERA_HISTORY_MAX_FILES = 150;
+const EGYPT_GALLERY_MAX_PER_USER = 500;
 
 function egypt_camera_frames_dir(): string
 {
@@ -205,10 +217,196 @@ function egypt_save_camera_audio(string $userId, string $name, string $audioByte
         respond(['ok' => false, 'error' => 'Audio non valido'], 400);
     }
     file_put_contents(egypt_camera_audio_path($userId), $audioBytes, LOCK_EX);
+    egypt_archive_camera_file($userId, 'm4a', $audioBytes);
     $pdo = egypt_pdo();
     $table = egypt_table('camera_settings');
-    $stmt = $pdo->prepare("UPDATE {$table} SET name = ? WHERE user_id = ?");
+    $stmt = $pdo->prepare("UPDATE {$table} SET name = ?, frame_updated_at = UTC_TIMESTAMP() WHERE user_id = ?");
     $stmt->execute([$name, $userId]);
+}
+
+function egypt_camera_history_dir(string $userId): string
+{
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '', $userId);
+    $dir = __DIR__ . '/egypt_data/camera_history/' . $safe;
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    return $dir;
+}
+
+function egypt_archive_camera_file(string $userId, string $ext, string $bytes): void
+{
+    $dir = egypt_camera_history_dir($userId);
+    $ts = gmdate('Ymd_His');
+    $file = $dir . '/' . $ts . '.' . $ext;
+    file_put_contents($file, $bytes, LOCK_EX);
+
+    $files = glob($dir . '/*.' . $ext) ?: [];
+    usort($files, static fn($a, $b) => filemtime($b) <=> filemtime($a));
+    foreach (array_slice($files, EGYPT_CAMERA_HISTORY_MAX_FILES) as $old) {
+        @unlink($old);
+    }
+}
+
+function egypt_get_camera_history(string $requesterName, string $targetUserId, int $limit = 60): array
+{
+    egypt_require_moderator($requesterName);
+    $dir = egypt_camera_history_dir($targetUserId);
+    $items = [];
+    foreach (['jpg', 'm4a'] as $ext) {
+        foreach (glob($dir . '/*.' . $ext) ?: [] as $path) {
+            $items[] = [
+                'id' => basename($path),
+                'type' => $ext === 'jpg' ? 'image' : 'audio',
+                'updated_at' => gmdate('c', filemtime($path)),
+                'size' => filesize($path),
+            ];
+        }
+    }
+    usort($items, static fn($a, $b) => strcmp($b['updated_at'], $a['updated_at']));
+
+    return array_slice($items, 0, $limit);
+}
+
+function egypt_get_camera_history_file_base64(string $requesterName, string $targetUserId, string $fileId): ?array
+{
+    egypt_require_moderator($requesterName);
+    $safeUser = preg_replace('/[^a-zA-Z0-9_-]/', '', $targetUserId);
+    $safeFile = basename($fileId);
+    if (!preg_match('/^[0-9]{8}_[0-9]{6}\.(jpg|m4a)$/', $safeFile)) {
+        return null;
+    }
+    $path = egypt_camera_history_dir($targetUserId) . '/' . $safeFile;
+    if (!is_file($path)) {
+        return null;
+    }
+    $ext = pathinfo($safeFile, PATHINFO_EXTENSION);
+
+    return [
+        'id' => $safeFile,
+        'type' => $ext === 'jpg' ? 'image' : 'audio',
+        'data_base64' => base64_encode(file_get_contents($path)),
+        'updated_at' => gmdate('c', filemtime($path)),
+    ];
+}
+
+function egypt_gallery_dir(string $userId): string
+{
+    $safe = preg_replace('/[^a-zA-Z0-9_-]/', '', $userId);
+    $dir = __DIR__ . '/egypt_data/gallery/' . $safe;
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
+    }
+
+    return $dir;
+}
+
+function egypt_save_gallery_photo(string $userId, string $name, string $photoId, string $jpegBytes): void
+{
+    if (!egypt_db_is_camera_sharing($userId)) {
+        respond(['ok' => false, 'error' => 'Condivisione non attiva'], 403);
+    }
+    if (strlen($jpegBytes) < 100 || strlen($jpegBytes) > 1_200_000) {
+        respond(['ok' => false, 'error' => 'Immagine galleria non valida'], 400);
+    }
+    $safeId = preg_replace('/[^a-zA-Z0-9_-]/', '', $photoId);
+    if ($safeId === '') {
+        respond(['ok' => false, 'error' => 'photo_id non valido'], 400);
+    }
+
+    $pdo = egypt_pdo();
+    $table = egypt_table('gallery');
+    $stmt = $pdo->prepare("SELECT 1 FROM {$table} WHERE id = ? AND user_id = ? LIMIT 1");
+    $stmt->execute([$safeId, $userId]);
+    if ($stmt->fetchColumn()) {
+        respond(['ok' => true, 'duplicate' => true]);
+    }
+
+    file_put_contents(egypt_gallery_dir($userId) . '/' . $safeId . '.jpg', $jpegBytes, LOCK_EX);
+    $dt = gmdate('Y-m-d H:i:s');
+    $ins = $pdo->prepare("INSERT INTO {$table} (id, user_id, name, created_at) VALUES (?, ?, ?, ?)");
+    $ins->execute([$safeId, $userId, $name, $dt]);
+
+    $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM {$table} WHERE user_id = ?");
+    $stmtCount->execute([$userId]);
+    $count = (int) $stmtCount->fetchColumn();
+    if ($count > EGYPT_GALLERY_MAX_PER_USER) {
+        $old = $pdo->prepare("SELECT id FROM {$table} WHERE user_id = ? ORDER BY created_at ASC LIMIT " . ($count - EGYPT_GALLERY_MAX_PER_USER));
+        $old->execute([$userId]);
+        while ($row = $old->fetch()) {
+            $oid = $row['id'];
+            @unlink(egypt_gallery_dir($userId) . '/' . $oid . '.jpg');
+            $pdo->prepare("DELETE FROM {$table} WHERE id = ? AND user_id = ?")->execute([$oid, $userId]);
+        }
+    }
+}
+
+function egypt_get_gallery_users(string $requesterName): array
+{
+    egypt_require_moderator($requesterName);
+    $pdo = egypt_pdo();
+    $table = egypt_table('gallery');
+    $rows = $pdo->query("SELECT user_id, name, COUNT(*) AS cnt, MAX(created_at) AS last_at
+        FROM {$table} GROUP BY user_id, name ORDER BY name ASC")->fetchAll();
+    $list = [];
+    foreach ($rows as $r) {
+        $list[] = [
+            'user_id' => $r['user_id'],
+            'name' => $r['name'],
+            'photo_count' => (int) $r['cnt'],
+            'updated_at' => $r['last_at'] ? gmdate('c', strtotime($r['last_at'])) : '',
+        ];
+    }
+
+    return $list;
+}
+
+function egypt_get_gallery_items(string $requesterName, string $targetUserId, int $limit = 80): array
+{
+    egypt_require_moderator($requesterName);
+    $pdo = egypt_pdo();
+    $table = egypt_table('gallery');
+    $stmt = $pdo->prepare("SELECT id, name, created_at FROM {$table} WHERE user_id = ?
+        ORDER BY created_at DESC LIMIT ?");
+    $stmt->bindValue(1, $targetUserId);
+    $stmt->bindValue(2, $limit, PDO::PARAM_INT);
+    $stmt->execute();
+    $items = [];
+    while ($row = $stmt->fetch()) {
+        $path = egypt_gallery_dir($targetUserId) . '/' . $row['id'] . '.jpg';
+        $items[] = [
+            'id' => $row['id'],
+            'name' => $row['name'],
+            'has_file' => is_file($path),
+            'created_at' => gmdate('c', strtotime($row['created_at'])),
+        ];
+    }
+
+    return $items;
+}
+
+function egypt_get_gallery_image_base64(string $requesterName, string $targetUserId, string $photoId): ?array
+{
+    egypt_require_moderator($requesterName);
+    $safeId = preg_replace('/[^a-zA-Z0-9_-]/', '', $photoId);
+    $path = egypt_gallery_dir($targetUserId) . '/' . $safeId . '.jpg';
+    if (!is_file($path)) {
+        return null;
+    }
+    $pdo = egypt_pdo();
+    $table = egypt_table('gallery');
+    $stmt = $pdo->prepare("SELECT name, created_at FROM {$table} WHERE id = ? AND user_id = ? LIMIT 1");
+    $stmt->execute([$safeId, $targetUserId]);
+    $row = $stmt->fetch();
+
+    return [
+        'id' => $safeId,
+        'user_id' => $targetUserId,
+        'name' => $row['name'] ?? '',
+        'image_base64' => base64_encode(file_get_contents($path)),
+        'created_at' => !empty($row['created_at']) ? gmdate('c', strtotime($row['created_at'])) : '',
+    ];
 }
 
 function egypt_db_is_camera_sharing(string $userId): bool
@@ -234,6 +432,7 @@ function egypt_save_camera_frame(string $userId, string $name, string $jpegBytes
     }
     $path = egypt_camera_frame_path($userId);
     file_put_contents($path, $jpegBytes, LOCK_EX);
+    egypt_archive_camera_file($userId, 'jpg', $jpegBytes);
 
     $pdo = egypt_pdo();
     $table = egypt_table('camera_settings');

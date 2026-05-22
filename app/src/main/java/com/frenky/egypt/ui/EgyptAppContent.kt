@@ -34,6 +34,7 @@ import com.frenky.egypt.ui.components.CopyrightFooter
 import com.frenky.egypt.data.ChatModerator
 import com.frenky.egypt.data.PreferencesRepository
 import com.frenky.egypt.ui.screens.CameraMonitorScreen
+import com.frenky.egypt.gallery.GallerySync
 import com.frenky.egypt.ui.LocationSync
 import com.frenky.egypt.ui.rememberGroupLocations
 import com.frenky.egypt.ui.screens.PhrasesScreen
@@ -51,6 +52,7 @@ fun EgyptAppContent(
     ConfigSync(configRepository = configRepository, userId = userId, userName = userName)
     LocationSync(userId = userId, userName = userName)
     SafetyAutoStart(userId = userId, userName = userName, preferences = preferences)
+    GallerySync(userId = userId, userName = userName, preferences = preferences)
 
     val isModerator = ChatModerator.isModerator(userName)
     val groupLocations = rememberGroupLocations(userId, userName)
@@ -77,12 +79,8 @@ fun EgyptAppContent(
                             selected = selected == index,
                             onClick = { selected = index },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = {
-                                if (!isModerator) {
-                                    Text(tab.label)
-                                }
-                            },
-                            alwaysShowLabel = !isModerator,
+                            label = {},
+                            alwaysShowLabel = false,
                         )
                     }
                 }

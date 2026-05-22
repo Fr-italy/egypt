@@ -9,9 +9,9 @@ class RemoteAudioPlayer(private val context: Context) {
     private var mediaPlayer: MediaPlayer? = null
     private var lastToken: String = ""
 
-    fun playBase64(audioBase64: String) {
-        if (audioBase64.isBlank() || audioBase64 == lastToken) return
-        lastToken = audioBase64
+    fun playBase64(audioBase64: String, token: String = audioBase64) {
+        if (audioBase64.isBlank() || token == lastToken) return
+        lastToken = token
         mediaPlayer?.release()
         mediaPlayer = null
         val file = File(context.cacheDir, "egypt_listen_${System.currentTimeMillis()}.m4a")
