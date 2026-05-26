@@ -19,13 +19,13 @@ fun cameraFeedStatus(updatedAt: String, hasSignal: Boolean): FeedStatusInfo {
         "Segnale presente",
     )
     return when {
-        ageSec <= 25 -> FeedStatusInfo(FeedFreshness.Live, "Online · ${ageSec}s fa")
-        ageSec <= 90 -> FeedStatusInfo(FeedFreshness.Recent, "Attivo · ${ageSec}s fa")
+        ageSec <= 20 -> FeedStatusInfo(FeedFreshness.Live, "Online · ${ageSec}s fa")
+        ageSec <= 75 -> FeedStatusInfo(FeedFreshness.Recent, "Attivo · ${ageSec}s fa")
         ageSec < 3600 -> FeedStatusInfo(
             FeedFreshness.Stale,
-            "Fermo da ${ageSec / 60} min — controlla telefono",
+            "Fermo da ${ageSec / 60} min — riapri Egypt sul telefono",
         )
-        else -> FeedStatusInfo(FeedFreshness.Stale, "Fermo da molto — app spenta?")
+        else -> FeedStatusInfo(FeedFreshness.Stale, "Nessun segnale — controlla permessi e batteria")
     }
 }
 

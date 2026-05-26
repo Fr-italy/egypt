@@ -117,7 +117,7 @@ private fun LiveCameraSection(modifier: Modifier, moderatorName: String) {
                 }
                 .onFailure { status = it.message }
             loading = false
-            delay(if (selected == null) 12_000 else 3_000)
+            delay(if (selected == null) 5_000 else 2_000)
         }
     }
 
@@ -179,7 +179,7 @@ private fun GallerySection(modifier: Modifier, moderatorName: String) {
             Text("Galleria telefoni", style = MaterialTheme.typography.headlineSmall)
             Text(
                 "Foto sincronizzate dal telefono del gruppo (backup su fr-italy). " +
-                    "Servono permesso galleria e app aperta.",
+                    "Serve permesso Galleria sul telefono del bimbo; sync ogni ~45 s.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp),
@@ -503,8 +503,8 @@ private fun CameraNameList(
     Column(modifier.fillMaxSize().padding(16.dp)) {
         Text("CAM — live", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Aggiornamento ~8 s. Verde = telefono attivo, arancione/rosso = fermo: " +
-                "riapri Egypt sul telefono del bimbo e disattiva risparmio energetico per l'app.",
+            "Live a scatti (~3–4 s, non video continuo). Verde = attivo: " +
+                "lascia Egypt in background sul telefono del bimbo e disattiva risparmio batteria per l'app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 12.dp),
@@ -632,7 +632,7 @@ private fun LiveCameraView(
                     Column {
                         Text(feed.name, fontWeight = FontWeight.Bold)
                         Text(
-                            "LIVE · aggiornamento ~8 s",
+                            "LIVE · aggiornamento ~3 s",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                         )

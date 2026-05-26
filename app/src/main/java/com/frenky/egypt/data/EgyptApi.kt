@@ -57,6 +57,8 @@ object EgyptApi {
         val gallery_items: List<GalleryItem> = emptyList(),
         val gallery_image: GalleryImage? = null,
         val enabled: Boolean = false,
+        val removed_users: Int? = null,
+        val disabled_cameras: Int? = null,
     )
 
     @Serializable
@@ -179,6 +181,9 @@ object EgyptApi {
 
     suspend fun clearMessages(userId: String, name: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "clear_messages", user_id = userId, name = name))
+
+    suspend fun cleanupUsers(userId: String, name: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "cleanup_users", user_id = userId, name = name))
 
     suspend fun heartbeat(userId: String, name: String): Result<ApiResponse> =
         ioPost(ApiRequest(action = "heartbeat", user_id = userId, name = name))

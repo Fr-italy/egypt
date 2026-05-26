@@ -643,6 +643,23 @@ switch ($action) {
             'config' => build_config_payload(),
         ]);
 
+    case 'cleanup_users':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        if ($userId === '' || $name === '') {
+            respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
+        }
+        egypt_require_moderator($name);
+        $stats = egypt_cleanup_duplicate_users();
+        egypt_touch_user($userId, $name, $now);
+        respond([
+            'ok' => true,
+            'removed_users' => $stats['removed_users'],
+            'disabled_cameras' => $stats['disabled_cameras'],
+            'users' => $stats['users'],
+            'config' => build_config_payload(),
+        ]);
+
     case 'toggle_checklist':
         $userId = trim($body['user_id'] ?? '');
         $name = trim($body['name'] ?? '');

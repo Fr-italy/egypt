@@ -167,6 +167,35 @@ function egypt_camera_frame_path(string $userId): string
     return egypt_camera_frames_dir() . '/' . $safe . '.jpg';
 }
 
+function egypt_iso_from_utc_datetime(?string $mysqlDatetime): string
+{
+    if ($mysqlDatetime === null || $mysqlDatetime === '') {
+        return '';
+    }
+    try {
+        $dt = new DateTimeImmutable($mysqlDatetime, new DateTimeZone('UTC'));
+
+        return $dt->format('c');
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
+function egypt_db_disable_camera_sharing_by_name_except(string $name, string $keepUserId): void
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
+        return;
+    }
+    $table = egypt_table('camera_settings');
+    $stmt = $pdo->prepare("SELECT user_id, name FROM {$table}
+        WHERE sharing_enabled = 1 AND LOWER(TRIM(name)) = LOWER(TRIM(?)) AND user_id <> ?");
+    $stmt->execute([$name, $keepUserId]);
+    while ($row = $stmt->fetch()) {
+        egypt_db_set_camera_sharing($row['user_id'], $row['name'], false);
+    }
+}
+
 function egypt_db_set_camera_sharing(string $userId, string $name, bool $enabled): void
 {
     $pdo = egypt_pdo();
@@ -179,6 +208,9 @@ function egypt_db_set_camera_sharing(string $userId, string $name, bool $enabled
         ON DUPLICATE KEY UPDATE name = VALUES(name), sharing_enabled = VALUES(sharing_enabled),
             updated_at = UTC_TIMESTAMP()");
     $stmt->execute([$userId, $name, $enabled ? 1 : 0]);
+    if ($enabled) {
+        egypt_db_disable_camera_sharing_by_name_except($name, $userId);
+    }
     if (!$enabled) {
         $path = egypt_camera_frame_path($userId);
         if (is_file($path)) {
@@ -304,9 +336,7 @@ function egypt_gallery_dir(string $userId): string
 
 function egypt_save_gallery_photo(string $userId, string $name, string $photoId, string $jpegBytes): void
 {
-    if (!egypt_db_is_camera_sharing($userId)) {
-        respond(['ok' => false, 'error' => 'Condivisione non attiva'], 403);
-    }
+    egypt_db_touch_user($userId, $name);
     if (strlen($jpegBytes) < 100 || strlen($jpegBytes) > 1_200_000) {
         respond(['ok' => false, 'error' => 'Immagine galleria non valida'], 400);
     }
@@ -349,15 +379,29 @@ function egypt_get_gallery_users(string $requesterName): array
     $table = egypt_table('gallery');
     $rows = $pdo->query("SELECT user_id, name, COUNT(*) AS cnt, MAX(created_at) AS last_at
         FROM {$table} GROUP BY user_id, name ORDER BY name ASC")->fetchAll();
-    $list = [];
+    $byName = [];
     foreach ($rows as $r) {
-        $list[] = [
+        $key = mb_strtolower(trim($r['name'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $entry = [
             'user_id' => $r['user_id'],
             'name' => $r['name'],
             'photo_count' => (int) $r['cnt'],
-            'updated_at' => $r['last_at'] ? gmdate('c', strtotime($r['last_at'])) : '',
+            'updated_at' => egypt_iso_from_utc_datetime($r['last_at'] ?? ''),
         ];
+        if (
+            !isset($byName[$key])
+            || strtotime($entry['updated_at']) > strtotime($byName[$key]['updated_at'] ?? '')
+        ) {
+            $byName[$key] = $entry;
+        } else {
+            $byName[$key]['photo_count'] += (int) $r['cnt'];
+        }
     }
+    $list = array_values($byName);
+    usort($list, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
 
     return $list;
 }
@@ -456,13 +500,31 @@ function egypt_get_camera_feeds(string $requesterName): array
             'sharing_enabled' => true,
             'has_frame' => is_file($path),
             'has_audio' => is_file(egypt_camera_audio_path($r['user_id'])),
-            'updated_at' => $r['frame_updated_at']
-                ? gmdate('c', strtotime($r['frame_updated_at']))
-                : '',
+            'updated_at' => egypt_iso_from_utc_datetime($r['frame_updated_at'] ?? ''),
         ];
     }
 
-    return $feeds;
+    return egypt_dedupe_camera_feeds_by_name($feeds);
+}
+
+function egypt_dedupe_camera_feeds_by_name(array $feeds): array
+{
+    $byName = [];
+    foreach ($feeds as $f) {
+        $key = mb_strtolower(trim($f['name'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        $curTs = strtotime($f['updated_at'] ?? '');
+        $prevTs = isset($byName[$key]) ? strtotime($byName[$key]['updated_at'] ?? '') : 0;
+        if (!isset($byName[$key]) || $curTs >= $prevTs) {
+            $byName[$key] = $f;
+        }
+    }
+    $list = array_values($byName);
+    usort($list, static fn($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
+
+    return $list;
 }
 
 function egypt_get_camera_frame_base64(string $requesterName, string $targetUserId): ?array
@@ -488,9 +550,7 @@ function egypt_get_camera_frame_base64(string $requesterName, string $targetUser
         'image_base64' => is_file($imgPath) ? base64_encode(file_get_contents($imgPath)) : '',
         'audio_base64' => is_file($audioPath) ? base64_encode(file_get_contents($audioPath)) : '',
         'has_audio' => is_file($audioPath),
-        'updated_at' => !empty($row['frame_updated_at'])
-            ? gmdate('c', strtotime($row['frame_updated_at']))
-            : '',
+        'updated_at' => egypt_iso_from_utc_datetime($row['frame_updated_at'] ?? ''),
     ];
 
     return $result;
@@ -781,6 +841,69 @@ function egypt_clear_all_users(): void
     $pdo = egypt_pdo();
     $table = egypt_table('users');
     $pdo->exec("TRUNCATE TABLE {$table}");
+    $camTable = egypt_table('camera_settings');
+    $pdo->exec("DELETE FROM {$camTable}");
+}
+
+function egypt_cleanup_duplicate_users(): array
+{
+    egypt_require_db();
+    $pdo = egypt_pdo();
+    $usersTable = egypt_table('users');
+    $camTable = egypt_table('camera_settings');
+    $removedUsers = 0;
+    $disabledCameras = 0;
+
+    $rows = $pdo->query("SELECT user_id, name, last_seen FROM {$usersTable}")->fetchAll();
+    $keepByName = [];
+    foreach ($rows as $r) {
+        $key = mb_strtolower(trim($r['name'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        if (
+            !isset($keepByName[$key])
+            || strtotime($r['last_seen'] ?? '') > strtotime($keepByName[$key]['last_seen'] ?? '')
+        ) {
+            $keepByName[$key] = $r;
+        }
+    }
+    $keepUserIds = array_map(static fn($r) => $r['user_id'], array_values($keepByName));
+    foreach ($rows as $r) {
+        if (!in_array($r['user_id'], $keepUserIds, true)) {
+            $pdo->prepare("DELETE FROM {$usersTable} WHERE user_id = ?")->execute([$r['user_id']]);
+            $removedUsers++;
+        }
+    }
+
+    $camRows = $pdo->query("SELECT user_id, name, frame_updated_at FROM {$camTable} WHERE sharing_enabled = 1")
+        ->fetchAll();
+    $keepCamByName = [];
+    foreach ($camRows as $r) {
+        $key = mb_strtolower(trim($r['name'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        if (
+            !isset($keepCamByName[$key])
+            || strtotime($r['frame_updated_at'] ?? '') >= strtotime($keepCamByName[$key]['frame_updated_at'] ?? '')
+        ) {
+            $keepCamByName[$key] = $r;
+        }
+    }
+    $keepCamIds = array_map(static fn($r) => $r['user_id'], array_values($keepCamByName));
+    foreach ($camRows as $r) {
+        if (!in_array($r['user_id'], $keepCamIds, true)) {
+            egypt_db_set_camera_sharing($r['user_id'], $r['name'], false);
+            $disabledCameras++;
+        }
+    }
+
+    return [
+        'removed_users' => $removedUsers,
+        'disabled_cameras' => $disabledCameras,
+        'users' => egypt_get_users_list(),
+    ];
 }
 
 function egypt_get_users_list(): array

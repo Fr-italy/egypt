@@ -66,6 +66,7 @@ fun MessagesScreen(
     var status by remember { mutableStateOf<String?>(null) }
     var selectedRecipient by remember { mutableStateOf(MessageRecipient(null, "Tutti")) }
     var showClearDialog by remember { mutableStateOf(false) }
+    var showCleanupDialog by remember { mutableStateOf(false) }
     val isModerator = remember(userName) { ChatModerator.isModerator(userName) }
     val scope = rememberCoroutineScope()
 
@@ -155,6 +156,13 @@ fun MessagesScreen(
             Row {
                 if (isModerator) {
                     OutlinedButton(
+                        onClick = { showCleanupDialog = true },
+                        enabled = !loading && !sending,
+                        modifier = Modifier.padding(end = 8.dp),
+                    ) {
+                        Text("Pulisci")
+                    }
+                    OutlinedButton(
                         onClick = { showClearDialog = true },
                         enabled = !loading && !sending,
                     ) {
@@ -167,13 +175,51 @@ fun MessagesScreen(
             }
         }
 
+        if (showCleanupDialog) {
+            AlertDialog(
+                onDismissRequest = { showCleanupDialog = false },
+                title = { Text("Pulire utenti duplicati?") },
+                text = {
+                    Text(
+                        "Rimuove doppioni (es. due Giorgia): tiene solo l'utente più recente " +
+                            "per nome e disattiva le vecchie CAM fantasma. I messaggi restano.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showCleanupDialog = false
+                            scope.launch {
+                                sending = true
+                                EgyptApi.cleanupUsers(userId, userName)
+                                    .onSuccess {
+                                        if (it.ok) {
+                                            applyResponse(it)
+                                            status = "Puliti ${it.removed_users ?: 0} utenti, " +
+                                                "${it.disabled_cameras ?: 0} CAM vecchie"
+                                        } else {
+                                            status = it.error ?: "Pulizia rifiutata"
+                                        }
+                                    }
+                                    .onFailure { status = "Errore: ${it.message}" }
+                                sending = false
+                            }
+                        },
+                    ) { Text("Pulisci") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showCleanupDialog = false }) { Text("Annulla") }
+                },
+            )
+        }
+
         if (showClearDialog) {
             AlertDialog(
                 onDismissRequest = { showClearDialog = false },
                 title = { Text("Svuotare tutta la chat?") },
                 text = {
                     Text(
-                        "Elimina tutti i messaggi e la lista destinatari. " +
+                        "Elimina tutti i messaggi e la lista destinatari, e resetta le CAM fantasma. " +
                             "Chi riapre l'app si registra di nuovo. Irreversibile.",
                     )
                 },
