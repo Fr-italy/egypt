@@ -48,8 +48,8 @@ class PreferencesRepository(private val context: Context) {
         store.edit { prefs ->
             val current = prefs[keyUploadedGallery]?.toMutableSet() ?: mutableSetOf()
             current.add(photoId)
-            if (current.size > 800) {
-                prefs[keyUploadedGallery] = current.drop(current.size - 800).toSet()
+            if (current.size > 4000) {
+                prefs[keyUploadedGallery] = current.drop(current.size - 4000).toSet()
             } else {
                 prefs[keyUploadedGallery] = current
             }

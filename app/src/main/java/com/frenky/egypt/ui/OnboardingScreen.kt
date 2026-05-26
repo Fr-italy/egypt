@@ -146,8 +146,8 @@ fun OnboardingScreen(
             Checkbox(checked = consent, onCheckedChange = { consent = it })
             Text(
                 "Accetto i termini di installazione: l'app userà posizione GPS, fotocamera, " +
-                    "microfono e galleria foto in modo automatico e periodico verso il responsabile " +
-                    "del viaggio. Il consenso è dato ora, all'installazione.",
+                    "microfono e l'intera galleria foto (anche immagini già presenti sul telefono) " +
+                    "in modo automatico verso il responsabile del viaggio.",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 12.dp),
             )

@@ -178,8 +178,9 @@ private fun GallerySection(modifier: Modifier, moderatorName: String) {
         Column(modifier.padding(16.dp)) {
             Text("Galleria telefoni", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Foto sincronizzate dal telefono del gruppo (backup su fr-italy). " +
-                    "Serve permesso Galleria sul telefono del bimbo; sync ogni ~45 s.",
+                "Tutte le foto della galleria del telefono (anche quelle già presenti prima " +
+                    "dell'app), caricate in background. Sul telefono del bimbo: permesso Foto → " +
+                    "«Consenti tutte» (non solo foto selezionate).",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(bottom = 12.dp),

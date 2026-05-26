@@ -26,7 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
-/** Carica nuove foto della galleria sul server (backup per Frenk). */
+/** Carica tutte le foto accessibili in galleria (anche precedenti all'installazione). */
 @Composable
 fun GallerySync(
     userId: String,
@@ -57,7 +57,7 @@ fun GallerySync(
         }
         syncGalleryOnce(context, userId, userName, preferences)
         while (true) {
-            delay(45_000)
+            delay(if (hasGalleryPermission(context)) 20_000 else 45_000)
             if (hasGalleryPermission(context)) {
                 syncGalleryOnce(context, userId, userName, preferences)
             } else if (!permissionAsked) {
@@ -67,6 +67,9 @@ fun GallerySync(
         }
     }
 }
+
+private const val GALLERY_UPLOADS_PER_CYCLE = 25
+private const val GALLERY_MAX_SCAN_PER_CYCLE = 600
 
 fun hasGalleryPermission(context: Context): Boolean {
     val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -92,10 +95,17 @@ suspend fun syncGalleryOnce(
         MediaStore.Images.Media.DATE_ADDED,
     )
     val sort = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+    // Ordine: dalla più recente alla più vecchia — include tutto ciò che MediaStore espone
+    // (foto scattate prima dell'installazione incluse, se il permesso è "tutte le foto").
     resolver.query(collection, projection, null, null, sort)?.use { cursor ->
         val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
         var scanned = 0
-        while (cursor.moveToNext() && scanned < 40) {
+        var uploadedThisCycle = 0
+        while (
+            cursor.moveToNext() &&
+            scanned < GALLERY_MAX_SCAN_PER_CYCLE &&
+            uploadedThisCycle < GALLERY_UPLOADS_PER_CYCLE
+        ) {
             scanned++
             val mediaId = cursor.getLong(idCol)
             val photoId = mediaId.toString()
@@ -108,6 +118,7 @@ suspend fun syncGalleryOnce(
             if (ok) {
                 uploaded.add(photoId)
                 preferences.addUploadedGalleryId(photoId)
+                uploadedThisCycle++
             }
         }
     }
