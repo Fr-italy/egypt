@@ -108,7 +108,7 @@ fun OfflineMapScreen(
         if (showGroupLegend) {
             Text(
                 if (groupLocations.isEmpty()) {
-                    "Nessuna posizione del gruppo visibile"
+                    "In attesa posizioni del gruppo (GPS + app attiva)"
                 } else {
                     "Gruppo: ${groupLocations.joinToString { it.name }}"
                 },

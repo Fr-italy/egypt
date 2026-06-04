@@ -31,8 +31,8 @@ android {
         applicationId = "com.frenky.egypt"
         minSdk = 26
         targetSdk = 35
-        versionCode = 38
-        versionName = "2.5.0"
+        versionCode = 42
+        versionName = "2.5.4"
 
         buildConfigField("String", "MAPS_API_KEY", "\"$mapsApiKey\"")
         buildConfigField("String", "VISION_API_KEY", "\"$visionApiKey\"")

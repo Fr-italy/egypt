@@ -45,6 +45,7 @@ fun EgyptAppContent(
 ) {
     ConfigSync(configRepository = configRepository, userId = userId, userName = userName)
     LocationSync(userId = userId, userName = userName)
+    val groupLocations = rememberGroupLocations(userId = userId, userName = userName)
 
     val tabs = listOf(
         Tab("Euro", Icons.Default.AttachMoney),
@@ -79,12 +80,18 @@ fun EgyptAppContent(
         val modifier = Modifier.padding(padding).fillMaxSize()
         when (selected) {
             0 -> ConverterScreen(modifier, config)
-            1 -> NabqMapScreen(modifier = modifier, config = config)
+            1 -> NabqMapScreen(
+                modifier = modifier,
+                config = config,
+                groupLocations = groupLocations,
+            )
             2 -> OfflineMapScreen(
                 modifier = modifier,
                 assetPath = "maps/resort_map.png",
                 title = "Mappa villaggio Pickalbatros",
                 bounds = config.resortMapBounds(),
+                groupLocations = groupLocations,
+                showGroupLegend = true,
             )
             3 -> PhrasesScreen(modifier, config.phrases_extra)
             4 -> SignTranslatorScreen(modifier)

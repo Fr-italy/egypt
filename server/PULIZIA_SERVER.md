@@ -45,7 +45,8 @@ Deve rispondere JSON con `"ok": true` e la sezione `config`.
 |--------|-----|
 | `config`, `fetch`, `register`, `heartbeat` | App base |
 | `send`, `delete_message`, `clear_messages`, `cleanup_users` | Chat |
-| `update_location` | GPS in background |
+| `update_location` | GPS in background (invio posizione) |
+| `get_locations` | Posizioni del gruppo sulla mappa (tutti) |
 | `toggle_checklist`, `update_rate`, `update_bounds` | Viaggio / admin |
 
-Rimosse: tutte le `*camera*` e `*gallery*`, `get_locations`, `set_camera_sharing`.
+Rimosse: tutte le `*camera*` e `*gallery*`, `set_camera_sharing`.

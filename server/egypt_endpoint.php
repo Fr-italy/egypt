@@ -402,6 +402,17 @@ switch ($action) {
         egypt_update_location($userId, $name, $lat, $lon, $now);
         respond(['ok' => true]);
 
+    case 'get_locations':
+        $userId = trim($body['user_id'] ?? '');
+        $name = trim($body['name'] ?? '');
+        if ($userId === '' || $name === '') {
+            respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
+        }
+        respond([
+            'ok' => true,
+            'locations' => egypt_get_group_locations($userId, $name),
+        ]);
+
     case 'register':
     case 'heartbeat':
         $userId = trim($body['user_id'] ?? '');

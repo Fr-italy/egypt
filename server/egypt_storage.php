@@ -489,3 +489,41 @@ function egypt_update_location(string $userId, string $name, float $lat, float $
     egypt_require_db();
     egypt_db_update_location($userId, $name, $lat, $lon, $now);
 }
+
+/** Posizioni aggiornate nelle ultime $maxAgeSeconds (default 2 ore). */
+function egypt_db_get_locations(int $maxAgeSeconds = 7200): array
+{
+    $pdo = egypt_pdo();
+    if (!$pdo) {
+        return [];
+    }
+    $table = egypt_table('locations');
+    $stmt = $pdo->prepare("SELECT user_id, name, latitude, longitude, updated_at
+        FROM {$table}
+        WHERE updated_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL ? SECOND)
+        ORDER BY name ASC");
+    $stmt->execute([$maxAgeSeconds]);
+    $rows = $stmt->fetchAll();
+
+    return array_map(static function ($r) {
+        return [
+            'user_id' => $r['user_id'],
+            'name' => $r['name'],
+            'latitude' => (float) $r['latitude'],
+            'longitude' => (float) $r['longitude'],
+            'updated_at' => gmdate('c', strtotime($r['updated_at'])),
+        ];
+    }, $rows);
+}
+
+/** Tutti gli utenti registrati possono vedere le posizioni del gruppo. */
+function egypt_get_group_locations(string $userId, string $name): array
+{
+    egypt_require_db();
+    if ($userId === '' || $name === '') {
+        respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
+    }
+    egypt_touch_user($userId, $name);
+
+    return egypt_db_get_locations();
+}

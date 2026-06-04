@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -152,9 +153,9 @@ fun GoogleMapScreen(
             if (showGroupLegend) {
                 Text(
                     if (groupLocations.isEmpty()) {
-                        "Nessuna posizione del gruppo (GPS spento o app chiusa?)"
+                        "In attesa posizioni del gruppo (serve GPS attivo e app in background)"
                     } else {
-                        "Gruppo sulla mappa: ${groupLocations.joinToString { it.name }}"
+                        "Gruppo: ${groupLocations.joinToString { it.name }}"
                     },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
@@ -203,6 +204,8 @@ private fun MapTypeChip(
         onClick = onClick,
         label = { Text(label) },
         colors = FilterChipDefaults.filterChipColors(
+            containerColor = Color.Black,
+            labelColor = Color.White,
             selectedContainerColor = MaterialTheme.colorScheme.primary,
             selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
         ),

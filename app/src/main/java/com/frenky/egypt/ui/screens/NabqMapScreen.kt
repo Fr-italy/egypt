@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.data.EgyptConfig
 import com.frenky.egypt.map.MapsSupport
 
@@ -14,12 +15,17 @@ import com.frenky.egypt.map.MapsSupport
 fun NabqMapScreen(
     modifier: Modifier = Modifier,
     config: EgyptConfig,
+    groupLocations: List<EgyptApi.UserLocation> = emptyList(),
 ) {
     val context = LocalContext.current
     val useGoogle = remember(context) { MapsSupport.canUseGoogleMaps(context) }
 
     if (useGoogle) {
-        GoogleMapScreen(modifier = modifier)
+        GoogleMapScreen(
+            modifier = modifier,
+            groupLocations = groupLocations,
+            showGroupLegend = true,
+        )
     } else {
         OfflineMapScreen(
             modifier = modifier,
@@ -31,6 +37,8 @@ fun NabqMapScreen(
             } else {
                 "Satellite offline · Google Play Services non disponibile"
             },
+            groupLocations = groupLocations,
+            showGroupLegend = true,
         )
     }
 }

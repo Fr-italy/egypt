@@ -134,6 +134,9 @@ object EgyptApi {
         ),
     )
 
+    suspend fun getGroupLocations(userId: String, userName: String): Result<ApiResponse> =
+        ioPost(ApiRequest(action = "get_locations", user_id = userId, name = userName))
+
     suspend fun toggleChecklist(
         userId: String,
         name: String,
