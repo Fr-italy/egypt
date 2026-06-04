@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.frenky.egypt.data.ConfigRepository
 import com.frenky.egypt.data.EgyptConfig
+import com.frenky.egypt.data.PreferencesRepository
 import com.frenky.egypt.ui.screens.ConverterScreen
 import com.frenky.egypt.ui.screens.TripScreen
 import com.frenky.egypt.ui.screens.MessagesScreen
@@ -36,12 +37,16 @@ import com.frenky.egypt.ui.screens.SignTranslatorScreen
 
 private data class Tab(val label: String, val icon: ImageVector)
 
+const val TAB_INDEX_CHAT = 6
+
 @Composable
 fun EgyptAppContent(
     userName: String,
     userId: String,
     config: EgyptConfig,
     configRepository: ConfigRepository,
+    preferences: PreferencesRepository,
+    initialTab: Int = 0,
 ) {
     ConfigSync(configRepository = configRepository, userId = userId, userName = userName)
     LocationSync(userId = userId, userName = userName)
@@ -56,7 +61,14 @@ fun EgyptAppContent(
         Tab("Viaggio", Icons.Default.Luggage),
         Tab("Chat", Icons.Default.Chat),
     )
-    var selected by rememberSaveable { mutableIntStateOf(0) }
+    var selected by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, TAB_INDEX_CHAT)) }
+
+    MessageNotificationSync(
+        userId = userId,
+        userName = userName,
+        preferences = preferences,
+        chatTabSelected = selected == TAB_INDEX_CHAT,
+    )
 
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Black,
@@ -92,6 +104,7 @@ fun EgyptAppContent(
                 bounds = config.resortMapBounds(),
                 groupLocations = groupLocations,
                 showGroupLegend = true,
+                fillViewport = true,
             )
             3 -> PhrasesScreen(modifier, config.phrases_extra)
             4 -> SignTranslatorScreen(modifier)

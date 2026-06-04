@@ -31,6 +31,7 @@ import androidx.core.content.ContextCompat
 import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.location.GpsPosition
 import com.frenky.egypt.location.LocationHelper
+import com.frenky.egypt.map.MapLandmarks
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -42,8 +43,6 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.MarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import kotlinx.coroutines.flow.catch
-
-private val RESORT_CENTER = LatLng(28.0428139, 34.429247)
 
 private fun isInEgypt(lat: Double, lon: Double): Boolean =
     lat in 22.0..32.0 && lon in 24.0..37.0
@@ -85,7 +84,7 @@ fun GoogleMapScreen(
     }
 
     val cameraPositionState = rememberCameraPositionState {
-        this.position = CameraPosition.fromLatLngZoom(RESORT_CENTER, 14f)
+        this.position = CameraPosition.fromLatLngZoom(MapLandmarks.defaultCenter, 14f)
     }
 
     LaunchedEffect(gps, permissionGranted) {
@@ -94,7 +93,7 @@ fun GoogleMapScreen(
         val target = when {
             pos != null && isInEgypt(pos.latitude, pos.longitude) ->
                 LatLng(pos.latitude, pos.longitude)
-            else -> RESORT_CENTER
+            else -> MapLandmarks.defaultCenter
         }
         val zoom = if (pos != null && isInEgypt(pos.latitude, pos.longitude)) 16f else 14f
         runCatching {
@@ -143,13 +142,24 @@ fun GoogleMapScreen(
                     )
                 }
             }
-            Marker(state = MarkerState(RESORT_CENTER), title = "Villaggio Pickalbatros")
+            MapLandmarks.points.forEach { place ->
+                Marker(
+                    state = MarkerState(place.latLng()),
+                    title = place.name,
+                    snippet = "Punto di riferimento",
+                )
+            }
         }
         Column(
             Modifier
                 .align(Alignment.TopCenter)
                 .padding(12.dp),
         ) {
+            Text(
+                "Luoghi: ${MapLandmarks.points.joinToString { it.name }}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
             if (showGroupLegend) {
                 Text(
                     if (groupLocations.isEmpty()) {

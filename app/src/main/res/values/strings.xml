@@ -6,4 +6,7 @@
     <string name="map_type_normal">Mappa</string>
     <string name="map_type_satellite">Satellite</string>
     <string name="map_type_hybrid">Ibrida</string>
+    <string name="chat_notification_channel_name">Messaggi Egypt</string>
+    <string name="chat_notification_channel_desc">Avvisi per nuovi messaggi del gruppo</string>
+    <string name="chat_notification_title">%1$s — Egypt</string>
 </resources>

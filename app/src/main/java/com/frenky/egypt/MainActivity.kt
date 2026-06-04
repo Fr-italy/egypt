@@ -16,13 +16,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import com.frenky.egypt.ui.EgyptAppContent
 import com.frenky.egypt.ui.OnboardingScreen
+import com.frenky.egypt.ui.TAB_INDEX_CHAT
 import com.frenky.egypt.ui.theme.EgyptTheme
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_OPEN_TAB = "open_tab"
+        const val TAB_CHAT = "chat"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as EgyptApp
+        val openChatTab = intent?.getStringExtra(EXTRA_OPEN_TAB) == TAB_CHAT
 
         setContent {
             val userName by app.preferences.userName.collectAsState(initial = null)
@@ -49,6 +56,8 @@ class MainActivity : ComponentActivity() {
                                 userId = userId!!,
                                 config = config,
                                 configRepository = app.configRepository,
+                                preferences = app.preferences,
+                                initialTab = if (openChatTab) TAB_INDEX_CHAT else 0,
                             )
                         }
                     }
