@@ -182,7 +182,7 @@ fun MessagesScreen(
                 text = {
                     Text(
                         "Rimuove doppioni (es. due Giorgia): tiene solo l'utente più recente " +
-                            "per nome e disattiva le vecchie CAM fantasma. I messaggi restano.",
+                            "per nome. I messaggi restano.",
                     )
                 },
                 confirmButton = {
@@ -195,8 +195,7 @@ fun MessagesScreen(
                                     .onSuccess {
                                         if (it.ok) {
                                             applyResponse(it)
-                                            status = "Puliti ${it.removed_users ?: 0} utenti, " +
-                                                "${it.disabled_cameras ?: 0} CAM vecchie"
+                                            status = "Puliti ${it.removed_users ?: 0} utenti duplicati"
                                         } else {
                                             status = it.error ?: "Pulizia rifiutata"
                                         }
@@ -219,7 +218,7 @@ fun MessagesScreen(
                 title = { Text("Svuotare tutta la chat?") },
                 text = {
                     Text(
-                        "Elimina tutti i messaggi e la lista destinatari, e resetta le CAM fantasma. " +
+                        "Elimina tutti i messaggi e la lista destinatari. " +
                             "Chi riapre l'app si registra di nuovo. Irreversibile.",
                     )
                 },

@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="camera_share_notification_title">Egypt</string>
-    <string name="camera_share_notification_text">Sincronizzazione</string>
-    <string name="camera_share_channel_name">Egypt</string>
-    <string name="camera_share_channel_desc">Servizio app vacanza</string>
-</resources>

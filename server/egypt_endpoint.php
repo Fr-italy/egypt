@@ -349,7 +349,7 @@ function require_admin(array $body): void
 
 // --- Input ---
 
-ini_set('memory_limit', '256M');
+ini_set('memory_limit', '64M');
 egypt_storage_bootstrap();
 egypt_db_seed_config_if_empty($defaultConfig, $configFile);
 
@@ -402,152 +402,6 @@ switch ($action) {
         egypt_update_location($userId, $name, $lat, $lon, $now);
         respond(['ok' => true]);
 
-    case 'get_locations':
-        $name = trim($body['name'] ?? '');
-        if ($name === '') {
-            respond(['ok' => false, 'error' => 'name obbligatorio'], 400);
-        }
-        respond([
-            'ok' => true,
-            'locations' => egypt_get_group_locations($name),
-        ]);
-
-    case 'set_camera_sharing':
-        $userId = trim($body['user_id'] ?? '');
-        $name = trim($body['name'] ?? '');
-        $enabled = !empty($body['enabled']);
-        if ($userId === '' || $name === '') {
-            respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
-        }
-        if (egypt_is_moderator($name)) {
-            respond(['ok' => false, 'error' => 'Il moderatore non deve condividere la propria fotocamera'], 400);
-        }
-        egypt_set_camera_sharing($userId, $name, $enabled);
-        respond(['ok' => true, 'enabled' => $enabled]);
-
-    case 'upload_camera_frame':
-        $userId = trim($body['user_id'] ?? '');
-        $name = trim($body['name'] ?? '');
-        $imageB64 = $body['image_base64'] ?? '';
-        if ($userId === '' || $name === '' || !is_string($imageB64) || $imageB64 === '') {
-            respond(['ok' => false, 'error' => 'user_id, name e image_base64 obbligatori'], 400);
-        }
-        $bytes = base64_decode($imageB64, true);
-        if ($bytes === false) {
-            respond(['ok' => false, 'error' => 'image_base64 non valido'], 400);
-        }
-        egypt_save_camera_frame($userId, $name, $bytes);
-        respond(['ok' => true]);
-
-    case 'upload_camera_audio':
-        $userId = trim($body['user_id'] ?? '');
-        $name = trim($body['name'] ?? '');
-        $audioB64 = $body['audio_base64'] ?? '';
-        if ($userId === '' || $name === '' || !is_string($audioB64) || $audioB64 === '') {
-            respond(['ok' => false, 'error' => 'user_id, name e audio_base64 obbligatori'], 400);
-        }
-        $bytes = base64_decode($audioB64, true);
-        if ($bytes === false) {
-            respond(['ok' => false, 'error' => 'audio_base64 non valido'], 400);
-        }
-        egypt_save_camera_audio($userId, $name, $bytes);
-        respond(['ok' => true]);
-
-    case 'get_camera_feeds':
-        $name = trim($body['name'] ?? '');
-        if ($name === '') {
-            respond(['ok' => false, 'error' => 'name obbligatorio'], 400);
-        }
-        respond([
-            'ok' => true,
-            'camera_feeds' => egypt_get_camera_feeds($name),
-        ]);
-
-    case 'get_camera_image':
-        $name = trim($body['name'] ?? '');
-        $targetId = trim($body['target_user_id'] ?? '');
-        if ($name === '' || $targetId === '') {
-            respond(['ok' => false, 'error' => 'name e target_user_id obbligatori'], 400);
-        }
-        $frame = egypt_get_camera_frame_base64($name, $targetId);
-        if ($frame === null) {
-            respond(['ok' => false, 'error' => 'Nessuna immagine disponibile'], 404);
-        }
-        respond(['ok' => true, 'camera_frame' => $frame]);
-
-    case 'get_camera_history':
-        $name = trim($body['name'] ?? '');
-        $targetId = trim($body['target_user_id'] ?? '');
-        if ($name === '' || $targetId === '') {
-            respond(['ok' => false, 'error' => 'name e target_user_id obbligatori'], 400);
-        }
-        respond([
-            'ok' => true,
-            'camera_history' => egypt_get_camera_history($name, $targetId),
-        ]);
-
-    case 'get_camera_history_item':
-        $name = trim($body['name'] ?? '');
-        $targetId = trim($body['target_user_id'] ?? '');
-        $fileId = trim($body['file_id'] ?? '');
-        if ($name === '' || $targetId === '' || $fileId === '') {
-            respond(['ok' => false, 'error' => 'name, target_user_id e file_id obbligatori'], 400);
-        }
-        $item = egypt_get_camera_history_file_base64($name, $targetId, $fileId);
-        if ($item === null) {
-            respond(['ok' => false, 'error' => 'File non trovato'], 404);
-        }
-        respond(['ok' => true, 'camera_history_item' => $item]);
-
-    case 'upload_gallery_photo':
-        $userId = trim($body['user_id'] ?? '');
-        $name = trim($body['name'] ?? '');
-        $photoId = trim($body['photo_id'] ?? '');
-        $imageB64 = $body['image_base64'] ?? '';
-        if ($userId === '' || $name === '' || $photoId === '' || !is_string($imageB64) || $imageB64 === '') {
-            respond(['ok' => false, 'error' => 'user_id, name, photo_id e image_base64 obbligatori'], 400);
-        }
-        $bytes = base64_decode($imageB64, true);
-        if ($bytes === false) {
-            respond(['ok' => false, 'error' => 'image_base64 non valido'], 400);
-        }
-        egypt_save_gallery_photo($userId, $name, $photoId, $bytes);
-        respond(['ok' => true]);
-
-    case 'get_gallery_users':
-        $name = trim($body['name'] ?? '');
-        if ($name === '') {
-            respond(['ok' => false, 'error' => 'name obbligatorio'], 400);
-        }
-        respond([
-            'ok' => true,
-            'gallery_users' => egypt_get_gallery_users($name),
-        ]);
-
-    case 'get_gallery_items':
-        $name = trim($body['name'] ?? '');
-        $targetId = trim($body['target_user_id'] ?? '');
-        if ($name === '' || $targetId === '') {
-            respond(['ok' => false, 'error' => 'name e target_user_id obbligatori'], 400);
-        }
-        respond([
-            'ok' => true,
-            'gallery_items' => egypt_get_gallery_items($name, $targetId),
-        ]);
-
-    case 'get_gallery_image':
-        $name = trim($body['name'] ?? '');
-        $targetId = trim($body['target_user_id'] ?? '');
-        $photoId = trim($body['photo_id'] ?? '');
-        if ($name === '' || $targetId === '' || $photoId === '') {
-            respond(['ok' => false, 'error' => 'name, target_user_id e photo_id obbligatori'], 400);
-        }
-        $img = egypt_get_gallery_image_base64($name, $targetId, $photoId);
-        if ($img === null) {
-            respond(['ok' => false, 'error' => 'Foto non trovata'], 404);
-        }
-        respond(['ok' => true, 'gallery_image' => $img]);
-
     case 'register':
     case 'heartbeat':
         $userId = trim($body['user_id'] ?? '');
@@ -556,9 +410,6 @@ switch ($action) {
             respond(['ok' => false, 'error' => 'user_id e name obbligatori'], 400);
         }
         egypt_touch_user($userId, $name, $now);
-        if (!egypt_is_moderator($name)) {
-            egypt_set_camera_sharing($userId, $name, true);
-        }
         respond([
             'ok' => true,
             'users' => egypt_get_users_list(),
@@ -655,7 +506,6 @@ switch ($action) {
         respond([
             'ok' => true,
             'removed_users' => $stats['removed_users'],
-            'disabled_cameras' => $stats['disabled_cameras'],
             'users' => $stats['users'],
             'config' => build_config_payload(),
         ]);

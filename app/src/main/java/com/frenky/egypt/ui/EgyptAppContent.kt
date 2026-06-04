@@ -11,7 +11,6 @@ import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.Translate
-import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -32,12 +31,6 @@ import com.frenky.egypt.ui.screens.MessagesScreen
 import com.frenky.egypt.ui.screens.NabqMapScreen
 import com.frenky.egypt.ui.screens.OfflineMapScreen
 import com.frenky.egypt.ui.components.CopyrightFooter
-import com.frenky.egypt.data.ChatModerator
-import com.frenky.egypt.data.PreferencesRepository
-import com.frenky.egypt.ui.screens.CameraMonitorScreen
-import com.frenky.egypt.gallery.GallerySync
-import com.frenky.egypt.ui.LocationSync
-import com.frenky.egypt.ui.rememberGroupLocations
 import com.frenky.egypt.ui.screens.PhrasesScreen
 import com.frenky.egypt.ui.screens.SignTranslatorScreen
 
@@ -49,26 +42,19 @@ fun EgyptAppContent(
     userId: String,
     config: EgyptConfig,
     configRepository: ConfigRepository,
-    preferences: PreferencesRepository,
 ) {
     ConfigSync(configRepository = configRepository, userId = userId, userName = userName)
     LocationSync(userId = userId, userName = userName)
-    SafetyAutoStart(userId = userId, userName = userName, preferences = preferences)
-    GallerySync(userId = userId, userName = userName, preferences = preferences)
 
-    val isModerator = ChatModerator.isModerator(userName)
-    val groupLocations = rememberGroupLocations(userId, userName)
-
-    val tabs = buildList {
-        add(Tab("Euro", Icons.Default.AttachMoney))
-        add(Tab("Nabq", Icons.Default.Map))
-        add(Tab("Villaggio", Icons.Default.Place))
-        add(Tab("Frasi", Icons.Default.Translate))
-        add(Tab("Insegne", Icons.Default.DocumentScanner))
-        add(Tab("Viaggio", Icons.Default.Luggage))
-        if (isModerator) add(Tab("CAM", Icons.Default.Videocam))
-        add(Tab("Chat", Icons.Default.Chat))
-    }
+    val tabs = listOf(
+        Tab("Euro", Icons.Default.AttachMoney),
+        Tab("Nabq", Icons.Default.Map),
+        Tab("Villaggio", Icons.Default.Place),
+        Tab("Frasi", Icons.Default.Translate),
+        Tab("Insegne", Icons.Default.DocumentScanner),
+        Tab("Viaggio", Icons.Default.Luggage),
+        Tab("Chat", Icons.Default.Chat),
+    )
     var selected by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
@@ -93,31 +79,17 @@ fun EgyptAppContent(
         val modifier = Modifier.padding(padding).fillMaxSize()
         when (selected) {
             0 -> ConverterScreen(modifier, config)
-            1 -> NabqMapScreen(
-                modifier = modifier,
-                config = config,
-                userName = userName,
-                groupLocations = groupLocations,
-            )
+            1 -> NabqMapScreen(modifier = modifier, config = config)
             2 -> OfflineMapScreen(
                 modifier = modifier,
                 assetPath = "maps/resort_map.png",
                 title = "Mappa villaggio Pickalbatros",
                 bounds = config.resortMapBounds(),
-                groupLocations = groupLocations,
-                showGroupLegend = isModerator,
             )
             3 -> PhrasesScreen(modifier, config.phrases_extra)
             4 -> SignTranslatorScreen(modifier)
             5 -> TripScreen(modifier, config, userId, userName, configRepository)
-            6 -> if (isModerator) {
-                CameraMonitorScreen(modifier, userName)
-            } else {
-                MessagesScreen(modifier, userName, userId, configRepository)
-            }
-            7 -> if (isModerator) {
-                MessagesScreen(modifier, userName, userId, configRepository)
-            }
+            6 -> MessagesScreen(modifier, userName, userId, configRepository)
         }
     }
 }

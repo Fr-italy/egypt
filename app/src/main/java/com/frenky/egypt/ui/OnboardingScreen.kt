@@ -32,29 +32,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.frenky.egypt.R
-import com.frenky.egypt.camera.CameraShareController
-import com.frenky.egypt.data.ChatModerator
 import com.frenky.egypt.data.ConfigRepository
 import com.frenky.egypt.data.EgyptApi
 import com.frenky.egypt.data.PreferencesRepository
 import com.frenky.egypt.ui.components.CopyrightFooter
 import kotlinx.coroutines.launch
 
-private fun installPermissions(forModerator: Boolean): Array<String> = buildList {
-    if (!forModerator) {
-        add(Manifest.permission.CAMERA)
-        add(Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.READ_MEDIA_IMAGES)
-        } else {
-            add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-    }
+private val installPermissions: Array<String> = buildList {
     add(Manifest.permission.ACCESS_FINE_LOCATION)
     add(Manifest.permission.ACCESS_COARSE_LOCATION)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -67,7 +55,6 @@ fun OnboardingScreen(
     preferences: PreferencesRepository,
     configRepository: ConfigRepository,
 ) {
-    val context = LocalContext.current
     var name by remember { mutableStateOf("") }
     var consent by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
@@ -79,19 +66,11 @@ fun OnboardingScreen(
             loading = true
             val userId = preferences.saveUser(trimmed)
             preferences.setSafetyConsentAccepted(true)
-            val isModerator = ChatModerator.isModerator(trimmed)
-            if (!isModerator) {
-                preferences.setCameraSharing(true)
-                EgyptApi.setCameraSharing(userId, trimmed, true)
-            }
             EgyptApi.register(userId, trimmed)
                 .onSuccess { r -> r.config?.let { configRepository.save(it) } }
                 .onFailure {
                     error = "Registrato in locale. Server: ${it.message}"
                 }
-            if (!isModerator && CameraShareController.hasCameraPermission(context)) {
-                CameraShareController.startSharing(context, userId, trimmed)
-            }
             loading = false
         }
     }
@@ -99,8 +78,7 @@ fun OnboardingScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { _ ->
-        val trimmed = name.trim()
-        completeRegistration(trimmed)
+        completeRegistration(name.trim())
     }
 
     LaunchedEffect(Unit) {
@@ -125,7 +103,7 @@ fun OnboardingScreen(
         Text("Benvenuto in Egypt", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(8.dp))
         Text(
-            "App vacanza Sharm — messaggi, mappe e sicurezza famiglia.",
+            "App vacanza Sharm — messaggi, mappe, frasi e viaggio.",
             textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -145,9 +123,8 @@ fun OnboardingScreen(
         ) {
             Checkbox(checked = consent, onCheckedChange = { consent = it })
             Text(
-                "Accetto i termini di installazione: l'app userà posizione GPS, fotocamera, " +
-                    "microfono e l'intera galleria foto (anche immagini già presenti sul telefono) " +
-                    "in modo automatico verso il responsabile del viaggio.",
+                "Accetto i termini di installazione: l'app può usare la posizione GPS " +
+                    "per le mappe e i messaggi di gruppo.",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 12.dp),
             )
@@ -172,7 +149,7 @@ fun OnboardingScreen(
                         return@Button
                     }
                     error = null
-                    permissionLauncher.launch(installPermissions(ChatModerator.isModerator(trimmed)))
+                    permissionLauncher.launch(installPermissions)
                 },
                 enabled = name.isNotBlank() && consent,
                 modifier = Modifier.fillMaxWidth(),
